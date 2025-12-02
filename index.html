@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Production - Column layout (fixed add + alignment)</title>
+
+<!-- SheetJS -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<!-- Firebase (compat) CDN - app + firestore -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+
+<style>
+    :root {
+        --blue: #1d4ed8;
+        --blue-dark: #0f2b6c;
+        --blue-light: #3b82f6;
+        --accent: #0ea5e9;
+        --slate: #4a5568;
+        --slate-light: #64748b;
+        --bg: #f0f4f8;
+        --bg-light: #f8fafc;
+        --card: #ffffff;
+        --border: #cbd5e0;
+        --border-light: #e2e8f0;
+        --success: #10b981;
+        --error: #ef4444;
+    }
+    * { box-sizing: border-box; margin:0; padding:0 }
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, var(--bg) 0%, var(--bg-light) 100%);
+        color: var(--slate);
+    }
+    .page { max-width:1400px; margin:18px auto; padding:0 12px; }
+
+    .hero {
+        display:flex; align-items:center; justify-content:space-between;
+        padding:16px; background: linear-gradient(135deg, var(--blue-dark), var(--blue));
+        color:#fff; border-radius:10px; margin-bottom:12px;
+    }
+    .hero-title h1 { margin:0; font-size:1.2rem; font-weight:700 }
+    .hero-title p { margin:6px 0 0; font-size:0.95rem; color:#e6f0ff }
+
+    .panel { background:var(--card); border-radius:12px; padding:14px; border:1px solid var(--border-light); box-shadow:0 6px 20px rgba(0,0,0,0.04) }
+
+    .controls { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+    .btn { background: linear-gradient(135deg, var(--blue), var(--blue-light)); color:#fff; padding:10px 14px; border-radius:10px; border:0; font-weight:700; cursor:pointer }
+    .btn.ghost { background:#fff; color:var(--blue-dark); border:2px solid var(--border-light); box-shadow:none }
+
+    /* Outlined transposed table */
+    .transposed-wrap { border:1px solid var(--border-light); border-radius:10px; overflow:auto; background:#fff }
+    .transposed { display:flex; gap:0; overflow:auto; align-items:flex-start; min-height:320px; }
+
+    /* left label column */
+    .fields-col{ min-width:320px; border-right:1px solid var(--border-light); background:linear-gradient(180deg,#fbfdff,#f7fbff); display:flex; flex-direction:column; }
+    .columns-toolbar{ padding:12px 16px; border-bottom:1px solid var(--border-light); background:transparent; font-weight:800; color:var(--blue-dark) }
+    .field-label { padding:10px 16px; border-bottom:1px solid var(--border-light); font-weight:700; color:var(--blue-dark); min-height:64px; display:flex; align-items:center }
+
+    /* record columns */
+    .record-col { min-width:300px; border-right:1px solid var(--border-light); background:#fff; display:flex; flex-direction:column; }
+    .record-header { padding:12px 14px; border-bottom:1px solid var(--border-light); text-align:center; font-weight:700; color:var(--slate) }
+    .record-col-inner { display:flex; flex-direction:column; }
+
+    /* important: same height for label and input rows for perfect alignment */
+    .cell { padding:8px 12px; border-bottom:1px solid var(--border-light); min-height:64px; display:flex; align-items:center; background:#fff }
+    .cell input[type="text"], .cell input[type="number"], .cell input[type="date"], .cell input[type="time"] {
+        width:100%; padding:10px 12px; border:2px solid var(--border); border-radius:8px; font-size:0.95rem; background:#fff; color:var(--slate);
+        height:44px; box-sizing:border-box;
+    }
+    .cell input[type="text"]:focus, .cell input[type="number"]:focus, .cell input[type="date"]:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 6px rgba(59,130,246,0.06) }
+
+    /* native time input: match other input styles */
+    .time-visible, input[type="time"] { width:100%; padding:10px 12px; border:2px solid var(--border); border-radius:8px; height:44px; box-sizing:border-box; background:#fff }
+    .time-visible:focus, input[type="time"]:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 6px rgba(59,130,246,0.06) }
+
+    /* responsive: stack columns on small screens */
+    @media (max-width:900px){
+        .fields-col { min-width:240px }
+        .record-col { min-width:240px }
+    }
+    @media (max-width:720px){
+        .transposed { flex-direction:column }
+        .fields-col, .record-col { width:100%; min-width:0 }
+    }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hero">
+    <div class="hero-title">
+      <h1>Production Data</h1>
+      <p>Fields on left. Each record is a vertical column of inputs.</p>
+    </div>
+    <div style="font-weight:700">Transposed / Column per record</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-left:12px">
+      <div id="fbStatus" style="font-weight:600;color:rgba(255,255,255,0.95);font-size:0.9rem"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="controls">
+      <button class="btn" id="addColBtn">+ Add Record</button>
+      <button class="btn ghost" id="saveBtn">Save Field</button>
+      <button class="btn ghost" id="loadBtn">Show Entries</button>
+
+      <label class="btn ghost" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
+        Import Excel
+        <input id="importXlsx" type="file" accept=".xlsx,.xls" style="display:none" />
+      </label>
+
+      <button class="btn" id="exportBtn">Export Excel</button>
+
+      <div style="margin-left:auto; color:var(--slate-light)">Tip: Click an input to edit. Time fields accept typing (<code>HH:MM</code> or <code>hh:mm AM/PM</code>) or native picker.</div>
+    </div>
+
+    <div class="transposed-wrap">
+      <div class="transposed" id="transposedArea"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* HEADERS */
+// All headers including Sr. No. (Sr. No. is stored in DB but not shown in the edit form)
+const ALL_HEADERS = [
+  "Sr. No.","Reactor No","Product Name","Category","Batch start date","Start time",
+  "Heating start time","Total reflux time","Total fraction cut collection time",
+  "Total feeding time","Total Main collection time","heating stop time","total heating hours",
+  "Batch Stop Date","Batch stop time","Total Process Time","Total Input","output",
+  "Water","F-1","F-2","Residue","drain qty while sampling","Packing Size",
+  "total drum packed","Packing MOC","Main Recovery%","Composite yield %","Cost","Remark"
+];
+
+/* header -> key */
+const headerToKey = {};
+// populate mapping for all headers
+ALL_HEADERS.forEach(h => { const k = String(h).toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,''); headerToKey[h] = k; });
+
+// headers used in the UI editor (don't show Sr. No.)
+const HEADERS = ALL_HEADERS.filter(h => String(h).toLowerCase() !== 'sr. no.');
+
+const STORAGE_KEY = "production_transposed_v1";
+// when Firestore is unavailable and we save locally, keep a backup copy here
+const LOCAL_SAVE_BACKUP_KEY = STORAGE_KEY + '_saved_backup';
+
+/* default record */
+function defaultRecord(){ const obj = {}; Object.values(headerToKey).forEach(k => obj[k]=""); return obj; }
+
+/* load/save raw (no sanitizing) */
+function loadRowsRaw(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw) return [defaultRecord()];
+  try { const arr = JSON.parse(raw); if(!Array.isArray(arr) || arr.length===0) return [defaultRecord()]; return arr; }
+  catch(e){ console.warn(e); return [defaultRecord()]; }
+}
+function saveRows(rows){ localStorage.setItem(STORAGE_KEY, JSON.stringify(rows)); }
+
+/* Clear/reset all inputs (persist a single blank/default record and re-render) */
+function clearAllInputs(){
+  saveRows([defaultRecord()]);
+  renderTransposed();
+  // also clear edit state and restore Save button text
+  window.__EDIT_DOC_ID = null;
+  const sb = document.getElementById('saveBtn'); if(sb) sb.textContent = 'Save Field';
+}
+
+/* sanitize: remove fully-empty records (all fields blank) */
+function sanitizeRecordsRaw(){
+  const raw = loadRowsRaw();
+  const cleaned = raw.filter(rec => Object.values(rec).some(v => v !== "" && v !== null && v !== undefined && String(v).trim() !== ""));
+  if(cleaned.length === 0) return [defaultRecord()];
+  return cleaned;
+}
+
+/* loadData returns sanitized data and persists cleaned version */
+function loadData(){
+  const cleaned = sanitizeRecordsRaw();
+  saveRows(cleaned);
+  return cleaned;
+}
+
+// ----------------------
+// Firebase initialization (compat SDK)
+// ----------------------
+const firebaseConfig = {
+  apiKey: "AIzaSyDBHgDWViT-YqyGgkcTX9nS6Ewe2Y7M23s",
+  authDomain: "ccpl-production.firebaseapp.com",
+  projectId: "ccpl-production",
+  storageBucket: "ccpl-production.firebasestorage.app",
+  messagingSenderId: "192591041978",
+  appId: "1:192591041978:web:f3faf7522279e75d4ff983",
+  measurementId: "G-55D64M975T"
+};
+
+try{
+  if (typeof firebase !== 'undefined' && firebase && !firebase.apps?.length){
+    firebase.initializeApp(firebaseConfig);
+  }
+}catch(e){ console.warn('Firebase init warning', e); }
+
+const db = (typeof firebase !== 'undefined' && firebase && firebase.firestore) ? firebase.firestore() : null;
+
+// Firestore rules that you should set in the Firebase Console (Security Rules)
+const FIRESTORE_RULES = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /metadata/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /tableData/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}`;
+
+// Ensure authentication (anonymous) for Firestore operations
+async function ensureAuth(){
+  if(!(typeof firebase !== 'undefined' && firebase && firebase.auth)){
+    console.warn('Firebase auth not available');
+    return false;
+  }
+  if(firebase.auth().currentUser){ window.__FIREBASE_USER = firebase.auth().currentUser; return true; }
+  try{
+    const creds = await firebase.auth().signInAnonymously();
+    window.__FIREBASE_USER = creds.user;
+    console.log('Signed in anonymously:', creds.user && creds.user.uid);
+    toast('Signed in to Firebase (anonymous)');
+    const el = document.getElementById('fbStatus'); if(el) el.textContent = 'DB: signed in (anonymous)';
+    return true;
+  }catch(err){ console.error('anonymous sign-in failed', err); toast('Firebase sign-in failed (see console)'); const el = document.getElementById('fbStatus'); if(el) el.textContent = 'DB: auth failed'; return false; }
+}
+
+// try to sign in immediately (best-effort)
+ensureAuth().catch(()=>{}).then(()=>{
+  const el = document.getElementById('fbStatus'); if(el && (!window.__FIREBASE_USER)) el.textContent = 'DB: not signed-in';
+});
+
+// UI: rules toggle and copy functionality
+document.addEventListener('click', (e)=>{
+  if(e.target && e.target.id === 'showRulesBtn'){
+    let existing = document.getElementById('rulesPanel');
+    if(existing){ existing.remove(); return; }
+    const el = document.createElement('div'); el.id='rulesPanel';
+    el.style.position='absolute'; el.style.top='86px'; el.style.right='18px'; el.style.maxWidth='540px'; el.style.zIndex=2000;
+    el.style.background='white'; el.style.color='#0f172a'; el.style.border='1px solid var(--border-light)'; el.style.borderRadius='10px';
+    el.style.boxShadow='0 10px 30px rgba(2,6,23,0.12)'; el.style.padding='12px';
+    const title = document.createElement('div'); title.textContent='Recommended Firestore Security Rules'; title.style.fontWeight='800'; title.style.marginBottom='8px'; el.appendChild(title);
+    const pre = document.createElement('pre'); pre.textContent = FIRESTORE_RULES; pre.style.whiteSpace='pre-wrap'; pre.style.background='#fafafa'; pre.style.padding='8px'; pre.style.borderRadius='8px'; pre.style.border='1px solid var(--border-light)'; pre.style.maxHeight='260px'; pre.style.overflow='auto'; el.appendChild(pre);
+    const copyBtn = document.createElement('button'); copyBtn.textContent='Copy rules to clipboard'; copyBtn.style.marginTop='8px'; copyBtn.style.padding='8px 10px'; copyBtn.style.border='0'; copyBtn.style.borderRadius='8px'; copyBtn.style.background='linear-gradient(135deg,var(--blue),var(--blue-light))'; copyBtn.style.color='white'; copyBtn.style.fontWeight='700'; copyBtn.style.cursor='pointer';
+    copyBtn.onclick = async ()=>{ try{ await navigator.clipboard.writeText(FIRESTORE_RULES); toast('Copied rules to clipboard'); }catch(err){ console.error(err); toast('Copy failed (see console)'); } };
+    el.appendChild(copyBtn);
+    document.body.appendChild(el);
+  }
+});
+
+// Helper: save an array of records into Firestore, auto-assigning sr_no using a counter document
+async function saveToFirestore(records){
+  if(!db) throw new Error('Firestore not initialized');
+  const ok = await ensureAuth();
+  if(!ok) throw new Error('Not authenticated for Firestore operations');
+  const counterRef = db.collection('metadata').doc('counters');
+  const prodRef = db.collection('production_records');
+  // Batch-style: compute how many valid records we actually need to write and assign sequential sr_no values in a single transaction.
+  const toSave = (records || []).filter(rec => rec && !Object.values(rec).every(v=>v===""||v===null||v===undefined));
+  if(toSave.length === 0) return { saved: 0 };
+
+  try{
+    await db.runTransaction(async tx => {
+      const cdoc = await tx.get(counterRef);
+      let last = 0;
+      if(cdoc.exists) last = cdoc.data().lastSerial || 0;
+      const nextStart = last + 1;
+      const nextEnd = last + toSave.length;
+      if(cdoc.exists) tx.update(counterRef, { lastSerial: nextEnd }); else tx.set(counterRef, { lastSerial: nextEnd });
+
+      for(let i=0;i<toSave.length;i++){
+        const rec = toSave[i];
+        const payload = Object.assign({}, rec);
+        payload.sr_no = nextStart + i;
+        payload.createdAt = firebase.firestore.FieldValue.serverTimestamp ? firebase.firestore.FieldValue.serverTimestamp() : new Date().toISOString();
+        const newDoc = prodRef.doc();
+        tx.set(newDoc, payload);
+      }
+    });
+    return { saved: toSave.length };
+  }catch(err){
+    console.error('saveToFirestore error', err);
+    throw err;
+  }
+}
+
+// update a single Firestore document by id with a record's fields
+async function updateFirestoreDoc(id, record){
+  if(!db) throw new Error('Firestore not initialized');
+  if(!id) throw new Error('Missing document id');
+  const ok = await ensureAuth(); if(!ok) throw new Error('Not authenticated');
+  const ref = db.collection('production_records').doc(id);
+  const payload = Object.assign({}, record);
+  // add updatedAt timestamp
+  payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp ? firebase.firestore.FieldValue.serverTimestamp() : new Date().toISOString();
+  await ref.update(payload);
+  return { id, updated: true };
+}
+
+// delete a firestore document by id
+async function deleteFirestoreDoc(id){
+  if(!db) throw new Error('Firestore not initialized');
+  if(!id) throw new Error('Missing document id');
+  const ok = await ensureAuth(); if(!ok) throw new Error('Not authenticated');
+  const ref = db.collection('production_records').doc(id);
+  await ref.delete();
+  return { id, deleted: true };
+}
+
+// Fill the editor (top transposed UI) with a record and mark it as being edited (store doc id)
+function fillEditorWithRecord(rec, docId){
+  // build a data object matching UI HEADERS keys
+  const obj = defaultRecord();
+  HEADERS.forEach(h => {
+    const k = headerToKey[h];
+    if(k && rec[k] !== undefined) obj[k] = rec[k];
+  });
+  // persist one record to local storage and mark edit ID
+  saveRows([obj]);
+  window.__EDIT_DOC_ID = docId; // used by save handler
+  renderTransposed();
+  const sb = document.getElementById('saveBtn'); if(sb) sb.textContent = 'Update Record';
+  toast('Loaded record into editor — edit and click Save');
+}
+
+// Helper: load all records from Firestore ordered by sr_no
+async function loadFromFirestore(){
+  if(!db) throw new Error('Firestore not initialized');
+  const ok = await ensureAuth();
+  if(!ok) throw new Error('Not authenticated for Firestore operations');
+  const prodRef = db.collection('production_records');
+  const snapshot = await prodRef.orderBy('sr_no','asc').get();
+  const rows = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  // store last fetched DB rows for export/use
+  window.__DB_LOADED_RECORDS = rows;
+  renderTable(rows);
+  toast('Loaded ' + rows.length + ' rows from database');
+  return rows;
+}
+
+// Render a regular table (rows) inside the transposed area for DB data (Excel-like)
+function renderTable(records){
+  const area = document.getElementById('transposedArea');
+  area.innerHTML = '';
+  const wrap = document.createElement('div'); wrap.style.padding = '12px';
+  const table = document.createElement('table'); table.style.width='100%'; table.style.borderCollapse='collapse';
+  table.style.fontSize='0.9rem';
+  const thead = document.createElement('thead');
+  const trh = document.createElement('tr');
+  // export headers: Sr. No. + HEADERS (UI fields) + Actions
+  const headerRow = ['Sr. No.', ...HEADERS, 'Actions'];
+  headerRow.forEach(h => {
+    const th = document.createElement('th'); th.textContent = h; th.style.padding='8px'; th.style.border='1px solid var(--border-light)'; th.style.background='#f8fafc'; th.style.textAlign='left'; trh.appendChild(th);
+  });
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  records.forEach(rec => {
+    const tr = document.createElement('tr');
+    const cells = [rec.sr_no ?? '', ...HEADERS.map(h => { const key = headerToKey[h] || (String(h).toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'')); return rec[key] !== undefined ? rec[key] : ''; })];
+    cells.forEach(c => { const td = document.createElement('td'); td.textContent = c; td.style.padding='8px'; td.style.border='1px solid var(--border-light)'; tr.appendChild(td); });
+
+    // actions cell: Edit & Delete
+    const actionsTd = document.createElement('td'); actionsTd.style.padding='8px'; actionsTd.style.border='1px solid var(--border-light)'; actionsTd.style.textAlign = 'center';
+    const editBtn = document.createElement('button'); editBtn.textContent = 'Edit'; editBtn.className='btn ghost'; editBtn.style.marginRight='6px';
+    editBtn.onclick = () => { try{ fillEditorWithRecord(rec, rec.id); }catch(e){ console.error('fill edit failed', e); toast('Failed to prepare edit'); } };
+    const deleteBtn = document.createElement('button'); deleteBtn.textContent = 'Delete'; deleteBtn.className='btn'; deleteBtn.onclick = async ()=>{
+      if(!confirm('Are you sure you want to delete this record?')) return;
+      try{ await deleteFirestoreDoc(rec.id); toast('Record deleted'); await loadFromFirestore(); }catch(err){ console.error(err); alert('Delete failed (see console)'); }
+    };
+    actionsTd.appendChild(editBtn); actionsTd.appendChild(deleteBtn);
+    tr.appendChild(actionsTd);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  area.appendChild(wrap);
+  // mark last render mode
+  window.__LAST_RENDER_MODE = 'table';
+}
+
+/* helpers for time */
+function pad(n){ return n<10 ? '0'+n : String(n); }
+function formatTimeToAMPMFrom24(hhmm){ if (!hhmm && hhmm !== 0) return ""; const parts = String(hhmm).split(':'); if (parts.length < 2) return hhmm; let hh = parseInt(parts[0],10), mm = parseInt(parts[1],10); if (isNaN(hh)||isNaN(mm)) return hhmm; const ampm = hh>=12?'PM':'AM'; hh=hh%12; if(hh===0) hh=12; return pad(hh)+':'+pad(mm)+' '+ampm; }
+function parseAMPMTo24(am){ if(!am) return ""; const m = String(am).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i); if(!m) return ""; let h = parseInt(m[1],10), mm = m[2], ap = m[3].toUpperCase(); if(ap==='AM' && h===12) h=0; if(ap==='PM' && h!==12) h+=12; return pad(h)+':'+mm; }
+function parseFlexibleTimeTo24(v){
+  if(!v) return ""; v=String(v).trim();
+  if(/^\d{1,2}:\d{2}$/.test(v)){ const [h,m]=v.split(':').map(Number); if(h>=0 && h<24 && m>=0 && m<60) return pad(h)+':'+pad(m); }
+  const ampmMatch = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i); if(ampmMatch) return parseAMPMTo24(ampmMatch[0]);
+  const digits = v.replace(/\D/g,'');
+  // guard against treating 4-digit year-like numbers (e.g., 2024) as times. If digits is a 4-digit
+  // number in the range 1900-2100, treat it as a year and do NOT parse into a time.
+  if(/^\d{3,4}$/.test(digits)){
+    if(digits.length===4){ const asNum = Number(digits); if(asNum>=1900 && asNum<=2100) return ""; }
+    if(digits.length===3){ const h=Number(digits.slice(0,1)), m=Number(digits.slice(1)); if(h>=0 && h<24 && m>=0 && m<60) return pad(h)+':'+pad(m); }
+    else { const h=Number(digits.slice(0,2)), m=Number(digits.slice(2)); if(h>=0 && h<24 && m>=0 && m<60) return pad(h)+':'+pad(m); }
+  }
+  return "";
+}
+
+/* render transposed */
+function renderTransposed(){
+  const area = document.getElementById('transposedArea');
+  const data = window.__TRANS_DATA = loadData();
+  area.innerHTML = "";
+
+  // fields column
+  const fieldsCol = document.createElement('div'); fieldsCol.className='fields-col';
+  const toolbar = document.createElement('div'); toolbar.className='columns-toolbar'; toolbar.textContent='Fields';
+  fieldsCol.appendChild(toolbar);
+  HEADERS.forEach(h => { const d = document.createElement('div'); d.className='field-label'; d.textContent=h; fieldsCol.appendChild(d); });
+  area.appendChild(fieldsCol);
+
+  // columns
+  data.forEach((rec, colIndex) => {
+    const col = document.createElement('div'); col.className='record-col';
+    const header = document.createElement('div'); header.className='record-header'; header.textContent = `Record ${colIndex+1}`; col.appendChild(header);
+    const inner = document.createElement('div'); inner.className='record-col-inner';
+
+    HEADERS.forEach(h => {
+      const key = headerToKey[h];
+      const cell = document.createElement('div'); cell.className='cell';
+      const lower = h.toLowerCase();
+      const isDate = lower.includes('date') || lower.includes('batch start') || lower.includes('batch stop');
+      // treat as a time input only when the header specifically references "time" or "start/stop time";
+      // don't match generic words like "heating hours" which are numeric.
+      const isTime = /\btime\b/.test(lower) || lower.includes('start time') || lower.includes('stop time') || lower.includes('heating start time') || lower.includes('heating stop time');
+
+      if (isDate){
+        // native date control (we only set valid ISO yyyy-mm-dd values)
+        const input = document.createElement('input'); input.type='date'; input.placeholder='YYYY-MM-DD';
+        if (rec[key]) {
+          const iso = parseToISODate(rec[key]);
+          if (iso) input.value = iso;
+        }
+        input.onchange = (e) => { const d = loadRowsRaw(); const v = String(e.target.value||'').trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(v)) d[colIndex][key]=v; else d[colIndex][key]=''; saveRows(d); renderTransposed(); };
+        cell.appendChild(input);
+
+      } else if (isTime){
+        // Use native time input. Store canonical 24-hour "HH:MM" in the data model.
+        const timeEl = document.createElement('input'); timeEl.type='time'; timeEl.className='time-visible';
+        const stored = String(rec[key]||"").trim();
+        // prefer to normalize stored values into HH:MM if possible
+        const as24 = parseFlexibleTimeTo24(stored);
+        if(as24) timeEl.value = as24;
+
+        // on input/update, persist canonical 24-hour value
+        timeEl.oninput = (e) => {
+          const v = e.target.value; // value should be HH:MM when valid
+          const d = loadRowsRaw();
+          d[colIndex][key] = v || "";
+          saveRows(d);
+        };
+        // on blur, re-render to reflect any normalization and update UI
+        timeEl.onchange = () => { renderTransposed(); };
+
+        // double-click to clear
+        timeEl.ondblclick = () => { const d = loadRowsRaw(); d[colIndex][key] = ""; saveRows(d); renderTransposed(); };
+
+        cell.appendChild(timeEl);
+
+      } else {
+        const numericHeads = ["total","qty","input","output","water","f-1","f-2","residue","drain","packing","cost","sr. no","main recovery","composite yield"];
+        const isNumeric = numericHeads.some(nh => lower.includes(nh));
+        const input = document.createElement('input'); input.type = isNumeric ? 'number' : 'text'; input.value = rec[key] ?? "";
+        input.onchange = (e) => { const d = loadRowsRaw(); let v = e.target.value; if(input.type==='number'){ const n=parseFloat(String(v).replace(/,/g,'')); v = isNaN(n)?v:n } d[colIndex][key]=v; saveRows(d); renderTransposed(); };
+        cell.appendChild(input);
+      }
+
+      inner.appendChild(cell);
+    });
+
+    col.appendChild(inner);
+    area.appendChild(col);
+  });
+
+  // ensure at least one column
+  if(data.length===0){
+    const p = document.createElement('div'); p.style.padding='16px'; p.textContent='No records. Click Add Record.'; area.appendChild(p);
+  }
+}
+
+/* parse date dd-mm-yyyy or dd/mm/yyyy to yyyy-mm-dd */
+function parseToISODate(v){
+  if(!v) return "";
+  v = String(v).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const m = v.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if(m){ const d = pad(Number(m[1])), mo = pad(Number(m[2])), y = m[3]; return `${y}-${mo}-${d}`; }
+  return "";
+}
+
+/* Add column (always allowed) and focus first input in new column */
+function addColumn(data){
+  const rows = loadRowsRaw();
+  rows.push(data || defaultRecord());
+  saveRows(rows);
+  renderTransposed();
+  // after render, focus first non-hidden input of last column
+  setTimeout(()=> {
+    const cols = document.querySelectorAll('.record-col');
+    if(cols.length){
+      const last = cols[cols.length-1];
+      // find first visible / usable input (skip type=hidden)
+      const inputs = Array.from(last.querySelectorAll('input'));
+      const firstInput = inputs.find(i => i.type !== 'hidden');
+      if(firstInput){ firstInput.focus(); firstInput.scrollIntoView({behavior:'smooth', block:'center', inline:'nearest'}); }
+    }
+  }, 120);
+}
+
+/* delete/duplicate if needed (not hooked to UI buttons by default) */
+function deleteColumn(idx){
+  if(!confirm('Delete this record?')) return;
+  const rows = loadRowsRaw();
+  rows.splice(idx,1);
+  if(rows.length===0) rows.push(defaultRecord());
+  saveRows(rows);
+  renderTransposed();
+}
+function duplicateColumn(idx){
+  const rows = loadRowsRaw();
+  const copy = JSON.parse(JSON.stringify(rows[idx]||defaultRecord()));
+  rows.splice(idx+1,0,copy);
+  saveRows(rows);
+  renderTransposed();
+}
+
+/* Import */
+document.getElementById('importXlsx').addEventListener('change', async (ev) => {
+  const f = ev.target.files[0];
+  if(!f) return;
+  try{
+    const data = await f.arrayBuffer();
+    const wb = XLSX.read(data,{type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const aoa = XLSX.utils.sheet_to_json(ws,{header:1, raw:false});
+    if(!aoa||aoa.length===0) return alert('No data found');
+    const incomingHeaders = aoa[0].map(h => String(h||"").trim());
+    const newRecords = [];
+    for(let r=1;r<aoa.length;r++){
+      const row = aoa[r];
+      const obj = defaultRecord();
+      for(let c=0;c<incomingHeaders.length;c++){
+        const h = incomingHeaders[c];
+        const val = row[c]!==undefined?row[c]:"";
+        let mappedKey = null;
+        for(const hh of Object.keys(headerToKey)){ if(hh.toLowerCase() === String(h).toLowerCase()){ mappedKey = headerToKey[hh]; break; } }
+        if(!mappedKey){
+          const norm = String(h||"").toLowerCase().replace(/\s+/g,' ').replace(/[^\w\s]/g,'').trim();
+          for(const hh of Object.keys(headerToKey)){ const n2 = hh.toLowerCase().replace(/\s+/g,' ').replace(/[^\w\s]/g,'').trim(); if(n2===norm){ mappedKey = headerToKey[hh]; break; } }
+        }
+        if(!mappedKey) mappedKey = String(h||"").toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
+        const lower = String(h||"").toLowerCase();
+        // Normalize imported time-like values into canonical 24-hour HH:MM when possible
+        if((/\btime\b/.test(lower) || lower.includes('start time') || lower.includes('stop time') || lower.includes('heating start time') || lower.includes('heating stop time')) && typeof val === 'string'){
+          const as24 = parseFlexibleTimeTo24(String(val).trim());
+          obj[mappedKey] = as24 || val;
+        } else if(/\bdate\b/.test(lower) && typeof val === 'string'){
+          const iso = parseToISODate(val); obj[mappedKey]= iso||val;
+        } else obj[mappedKey]=val;
+      }
+      newRecords.push(obj);
+    }
+    if(newRecords.length===0) return alert('No rows to import');
+    saveRows(newRecords);
+    renderTransposed();
+    toast('Imported ' + newRecords.length + ' rows');
+  } catch(err){ console.error(err); alert('Import failed (see console)'); } finally { ev.target.value=""; }
+});
+
+/* Export */
+document.getElementById('exportBtn').addEventListener('click', async ()=> {
+  // Export: prefer DB records (so Sr. No. present). Fallback to local records.
+  let records = window.__DB_LOADED_RECORDS || null;
+  if(!records){
+    if(db){ try { records = await loadFromFirestore(); } catch(e){ console.warn(e); } }
+  }
+  if(!records || records.length===0){
+    // fallback: export local data (no sr_no)
+    const local = loadData();
+    if(!local || local.length===0) return alert('No records to export');
+    // export without sr_no
+    const aoa = [HEADERS];
+    local.forEach(rec => {
+      const row = HEADERS.map(h => { const key = headerToKey[h] || (String(h).toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'')); return rec[key] !== undefined ? rec[key] : ""; });
+      aoa.push(row);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Production");
+    XLSX.writeFile(wb, `production-${new Date().toISOString().slice(0,10)}.xlsx`);
+    return;
+  }
+
+  // include Sr. No. as first column
+  const exportHeaders = ['Sr. No.', ...HEADERS];
+  const aoa = [exportHeaders];
+  records.forEach(rec => {
+    const row = exportHeaders.map(h => { const key = headerToKey[h] || (String(h).toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'')); return rec[key] !== undefined ? rec[key] : ""; });
+    aoa.push(row);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Production");
+  XLSX.writeFile(wb, `production-${new Date().toISOString().slice(0,10)}.xlsx`);
+});
+
+/* UI hooks */
+document.getElementById('addColBtn').addEventListener('click', ()=> addColumn());
+document.getElementById('saveBtn').addEventListener('click', async ()=> {
+  const cleaned = sanitizeRecordsRaw();
+  if(!cleaned || cleaned.length===0) return toast('No rows to save');
+  if(!db){
+    // fallback: save locally (keep a backup copy so saved rows are not lost when clearing the editor)
+    try{
+      const existing = JSON.parse(localStorage.getItem(LOCAL_SAVE_BACKUP_KEY) || '[]');
+      const updated = existing.concat(cleaned);
+      localStorage.setItem(LOCAL_SAVE_BACKUP_KEY, JSON.stringify(updated));
+    }catch(e){ console.warn('backup save failed', e); }
+    // then clear the editor inputs
+    clearAllInputs(); toast('Saved locally (Firestore not available) — editor cleared'); return;
+  }
+  try{
+    // if we're editing a single existing doc, update that document instead of creating new rows
+    if(window.__EDIT_DOC_ID){
+      const toUpdate = Array.isArray(cleaned) && cleaned.length ? cleaned[0] : null;
+      if(!toUpdate) return toast('No editable data present');
+      const upd = await updateFirestoreDoc(window.__EDIT_DOC_ID, toUpdate);
+      if(upd && upd.updated){
+        clearAllInputs();
+        window.__EDIT_DOC_ID = null;
+        toast('Record updated');
+      }
+      await loadFromFirestore();
+    } else {
+      const res = await saveToFirestore(cleaned);
+      if(res && res.saved){
+        // cloud write succeeded — clear editor inputs and then show DB table
+        clearAllInputs();
+        toast('Saved ' + res.saved + ' rows to database');
+        const s = document.getElementById('fbStatus'); if(s) s.textContent = 'DB: saved ' + res.saved + ' rows';
+      } else {
+        toast('No rows were saved to DB');
+      }
+      await loadFromFirestore();
+    }
+  }catch(err){
+    console.error(err);
+    // fallback: permission or auth errors -> save locally
+    const msg = String(err && (err.code || err.message || err)).toLowerCase();
+    if(msg.includes('permission') || msg.includes('not authenticated') || msg.includes('auth')){
+      // permission/auth issue — persist a local backup copy and clear the editor
+      try{ const existing = JSON.parse(localStorage.getItem(LOCAL_SAVE_BACKUP_KEY) || '[]'); const updated = existing.concat(cleaned); localStorage.setItem(LOCAL_SAVE_BACKUP_KEY, JSON.stringify(updated)); }catch(e){ console.warn('backup save failed', e); }
+      clearAllInputs();
+      toast('Permissions blocked DB — saved locally and editor cleared');
+      const s = document.getElementById('fbStatus'); if(s) s.textContent = 'DB: permission denied (saved locally)';
+    } else {
+      toast('Save to DB failed (see console)');
+    }
+  }
+});
+
+document.getElementById('loadBtn').addEventListener('click', async ()=> {
+  try{
+    await loadFromFirestore();
+  }catch(e){
+    console.error(e);
+    const msg = String(e && (e.code || e.message || e)).toLowerCase();
+    if(msg.includes('permission')|| msg.includes('not authenticated')|| msg.includes('auth')){
+      toast('Permissions prevent DB load — showing local data');
+      renderTransposed();
+    } else {
+      toast('Load failed (see console)');
+    }
+  }
+});
+
+/* toast */
+function toast(msg){
+  const el = document.createElement('div'); el.textContent = msg;
+  el.style.position='fixed'; el.style.right='16px'; el.style.bottom='16px';
+  el.style.background='var(--success)'; el.style.color='white'; el.style.padding='10px 14px';
+  el.style.borderRadius='10px'; el.style.boxShadow='0 6px 18px rgba(0,0,0,0.12)'; document.body.appendChild(el);
+  setTimeout(()=> el.remove(), 1400);
+}
+
+/* init */
+if(!localStorage.getItem(STORAGE_KEY)){ saveRows([defaultRecord()]); }
+renderTransposed();
+</script>
+</body>
+</html>
