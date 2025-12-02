@@ -71,6 +71,7 @@
         width:100%; padding:10px 12px; border:2px solid var(--border); border-radius:8px; font-size:0.95rem; background:#fff; color:var(--slate);
         height:44px; box-sizing:border-box;
     }
+      .cell input.invalid { border-color: #ef4444 !important; box-shadow: 0 0 0 6px rgba(239,68,68,0.08); }
     .cell input[type="text"]:focus, .cell input[type="number"]:focus, .cell input[type="date"]:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 6px rgba(59,130,246,0.06) }
 
     /* native time input: match other input styles */
@@ -86,6 +87,49 @@
         .transposed { flex-direction:column }
         .fields-col, .record-col { width:100%; min-width:0 }
     }
+
+    /* Mobile-specific: hide left labels column and show inline labels above inputs */
+@media (max-width:720px){
+    /* hide the left labels column */
+    .fields-col { display: none; }
+
+    /* stack each cell vertically and reduce min-height so it doesn't look empty */
+    .cell {
+        flex-direction: column;
+        align-items: flex-start;
+        min-height: auto;
+        padding: 10px 12px;
+        gap: 6px;
+    }
+
+    /* label shown above the input inside each cell */
+    .cell .cell-label {
+        display: block;
+        font-weight: 700;
+        color: var(--blue-dark);
+        font-size: 0.95rem;
+        line-height: 1.1;
+    }
+
+    /* make header align left and a bit smaller on mobile */
+    .record-header { text-align: left; font-size: 0.98rem; padding: 10px 12px; }
+
+    /* make inputs full width (they already are, but ensure) */
+    .cell input[type="text"], .cell input[type="number"], .cell input[type="date"], .cell input[type="time"] {
+        width: 100%;
+    }
+}
+
+/* Show Entries (DB table) responsive rules */
+.transposed-wrap .table-wrapper{ overflow-x:auto }
+.transposed-wrap table { width:100%; border-collapse:collapse; font-family: inherit; }
+.transposed-wrap th, .transposed-wrap td { padding:8px; border:1px solid var(--border-light); vertical-align: middle; }
+.transposed-wrap th { position: sticky; top:0; background:#f8fafc; z-index:2; text-align:left }
+@media (max-width:720px){
+  .transposed-wrap table { font-size:0.86rem; }
+  .transposed-wrap td { white-space:normal; word-break:break-word }
+}
+
 </style>
 </head>
 <body>
@@ -104,7 +148,7 @@
   <div class="panel">
     <div class="controls">
       <button class="btn" id="addColBtn">+ Add Record</button>
-      <button class="btn ghost" id="saveBtn">Save Field</button>
+      <!-- top-level Save removed (global Save sits below transposed area) -->
       <button class="btn ghost" id="loadBtn">Show Entries</button>
 
       <label class="btn ghost" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
@@ -119,6 +163,12 @@
 
     <div class="transposed-wrap">
       <div class="transposed" id="transposedArea"></div>
+    </div>
+
+    <!-- Global per-panel action buttons (single pair) -->
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:10px;">
+      <button id="saveBtn" class="btn">Save Field</button>
+      <button id="clearAllFieldsBtn" class="btn ghost">Clear Fields</button>
     </div>
   </div>
 </div>
@@ -167,6 +217,57 @@ function clearAllInputs(){
   window.__EDIT_DOC_ID = null;
   const sb = document.getElementById('saveBtn'); if(sb) sb.textContent = 'Save Field';
 }
+
+// Clear fields across all columns but keep column blocks present
+function clearAllFields(){
+  const rows = loadRowsRaw();
+  for(let i=0;i<rows.length;i++){
+    if(rows[i] && rows[i].__simple) rows[i].quick_text = '';
+    else if(rows[i]) Object.keys(rows[i]).forEach(k => { if(!String(k).startsWith('__')) rows[i][k] = ''; });
+  }
+  saveRows(rows); renderTransposed();
+}
+
+// full-clear: reset storage and app state back to an initial single blank record
+function clearFields(){
+  // remove saved rows and backups
+  try{ localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(LOCAL_SAVE_BACKUP_KEY); }catch(e){ console.warn('clearFields storage cleanup failed', e); }
+  // reset in-memory markers
+  window.__TRANS_DATA = null; window.__DB_LOADED_RECORDS = null; window.__EDIT_DOC_ID = null;
+  // persist initial state and re-render
+  saveRows([defaultRecord()]); renderTransposed();
+  // clear any input validation markers
+  document.querySelectorAll('.record-col input.invalid').forEach(i=>i.classList.remove('invalid'));
+  toast('All fields and local data cleared');
+}
+
+// Validate all current rows: returns { ok: bool, invalid: [indices] }
+function validateAllRows(){
+  const rows = loadRowsRaw(); const invalid = [];
+  rows.forEach((r, idx)=>{
+    if(r && r.__simple){ if(!String(r.quick_text||'').trim()) invalid.push(idx); }
+    else {
+      // require at least one non-empty, non-special string field
+      const hasText = Object.keys(r||{}).some(k => !String(k).startsWith('__') && r[k] !== undefined && r[k] !== null && String(r[k]).trim() !== '');
+      if(!hasText) invalid.push(idx);
+    }
+  });
+  return { ok: invalid.length===0, invalid };
+}
+
+// mark invalid columns visually
+function markInvalidColumns(indices){
+  // clear previous
+  document.querySelectorAll('.record-col input').forEach(i=>i.classList.remove('invalid'));
+  const cols = document.querySelectorAll('.record-col');
+  indices.forEach(i=>{
+    const col = cols[i]; if(!col) return; const inputs = col.querySelectorAll('input'); inputs.forEach(inp=> inp.classList.add('invalid'));
+  });
+}
+
+// clear a single column's inputs (keep remaining columns intact)
+function clearColumnInputs(idx){
+  const rows = loadRowsRaw(); if(!rows[idx]) return; Object.keys(rows[idx]).forEach(k => rows[idx][k] = ''); saveRows(rows); renderTransposed(); }
 
 /* sanitize: remove fully-empty records (all fields blank) */
 function sanitizeRecordsRaw(){
@@ -357,7 +458,7 @@ async function loadFromFirestore(){
 function renderTable(records){
   const area = document.getElementById('transposedArea');
   area.innerHTML = '';
-  const wrap = document.createElement('div'); wrap.style.padding = '12px';
+  const wrap = document.createElement('div'); wrap.className='table-wrapper'; wrap.style.padding = '12px';
   const table = document.createElement('table'); table.style.width='100%'; table.style.borderCollapse='collapse';
   table.style.fontSize='0.9rem';
   const thead = document.createElement('thead');
@@ -371,9 +472,11 @@ function renderTable(records){
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
-  records.forEach(rec => {
+  records.forEach((rec, idx) => {
     const tr = document.createElement('tr');
-    const cells = [rec.sr_no ?? '', ...HEADERS.map(h => { const key = headerToKey[h] || (String(h).toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'')); return rec[key] !== undefined ? rec[key] : ''; })];
+    // compute Sr. No. as contiguous index (re-number for display)
+    const sr = idx + 1;
+    const cells = [sr, ...HEADERS.map(h => { const key = headerToKey[h] || (String(h).toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'')); return rec[key] !== undefined ? rec[key] : ''; })];
     cells.forEach(c => { const td = document.createElement('td'); td.textContent = c; td.style.padding='8px'; td.style.border='1px solid var(--border-light)'; tr.appendChild(td); });
 
     // actions cell: Edit & Delete
@@ -389,8 +492,12 @@ function renderTable(records){
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
+  // make table wide enough to be readable on small screens and allow scrolling
+  table.style.minWidth = Math.max(600, headerRow.length * 110) + 'px';
   wrap.appendChild(table);
   area.appendChild(wrap);
+  // ensure global editor buttons remain accessible (buttons live outside the table view)
+  try{ const sb = document.getElementById('saveBtn'); const cb = document.getElementById('clearAllFieldsBtn'); if(sb) sb.style.display='inline-block'; if(cb) cb.style.display='inline-block'; }catch(e){}
   // mark last render mode
   window.__LAST_RENDER_MODE = 'table';
 }
@@ -430,61 +537,65 @@ function renderTransposed(){
   // columns
   data.forEach((rec, colIndex) => {
     const col = document.createElement('div'); col.className='record-col';
-    const header = document.createElement('div'); header.className='record-header'; header.textContent = `Record ${colIndex+1}`; col.appendChild(header);
+    // header with record label and remove (×) button
+    const header = document.createElement('div'); header.className='record-header'; header.style.display='flex'; header.style.justifyContent='space-between'; header.style.alignItems='center';
+    const label = document.createElement('div'); label.textContent = `Record ${colIndex+1}`; label.style.fontWeight='700';
+    const removeBtn = document.createElement('button'); removeBtn.textContent = '×'; removeBtn.title = 'Remove record'; removeBtn.style.border='0'; removeBtn.style.background='transparent'; removeBtn.style.fontSize='18px'; removeBtn.style.cursor='pointer'; removeBtn.style.color='var(--slate)';
+    removeBtn.onclick = ()=>{ deleteColumn(colIndex); };
+    header.appendChild(label); header.appendChild(removeBtn); col.appendChild(header);
     const inner = document.createElement('div'); inner.className='record-col-inner';
 
     HEADERS.forEach(h => {
-      const key = headerToKey[h];
-      const cell = document.createElement('div'); cell.className='cell';
-      const lower = h.toLowerCase();
-      const isDate = lower.includes('date') || lower.includes('batch start') || lower.includes('batch stop');
-      // treat as a time input only when the header specifically references "time" or "start/stop time";
-      // don't match generic words like "heating hours" which are numeric.
-      const isTime = /\btime\b/.test(lower) || lower.includes('start time') || lower.includes('stop time') || lower.includes('heating start time') || lower.includes('heating stop time');
+  const key = headerToKey[h];
+  const cell = document.createElement('div'); cell.className='cell';
+  const lower = h.toLowerCase();
+  const isDate = lower.includes('date') || lower.includes('batch start') || lower.includes('batch stop');
+  const isTime = /\btime\b/.test(lower) || lower.includes('start time') || lower.includes('stop time') || lower.includes('heating start time') || lower.includes('heating stop time');
 
-      if (isDate){
-        // native date control (we only set valid ISO yyyy-mm-dd values)
-        const input = document.createElement('input'); input.type='date'; input.placeholder='YYYY-MM-DD';
-        if (rec[key]) {
-          const iso = parseToISODate(rec[key]);
-          if (iso) input.value = iso;
-        }
-        input.onchange = (e) => { const d = loadRowsRaw(); const v = String(e.target.value||'').trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(v)) d[colIndex][key]=v; else d[colIndex][key]=''; saveRows(d); renderTransposed(); };
-        cell.appendChild(input);
+  // show inline label on small screens (we hide the left field-col via CSS)
+  const isSmall = window.innerWidth <= 720;
+  if(isSmall){
+    const lab = document.createElement('div');
+    lab.className = 'cell-label';
+    lab.textContent = h;
+    cell.appendChild(lab);
+  }
 
-      } else if (isTime){
-        // Use native time input. Store canonical 24-hour "HH:MM" in the data model.
-        const timeEl = document.createElement('input'); timeEl.type='time'; timeEl.className='time-visible';
-        const stored = String(rec[key]||"").trim();
-        // prefer to normalize stored values into HH:MM if possible
-        const as24 = parseFlexibleTimeTo24(stored);
-        if(as24) timeEl.value = as24;
+  if (isDate){
+    const input = document.createElement('input'); input.type='date'; input.placeholder='YYYY-MM-DD';
+    if (rec[key]) {
+      const iso = parseToISODate(rec[key]);
+      if (iso) input.value = iso;
+    }
+    input.onchange = (e) => { const d = loadRowsRaw(); const v = String(e.target.value||'').trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(v)) d[colIndex][key]=v; else d[colIndex][key]=''; saveRows(d); renderTransposed(); };
+    cell.appendChild(input);
 
-        // on input/update, persist canonical 24-hour value
-        timeEl.oninput = (e) => {
-          const v = e.target.value; // value should be HH:MM when valid
-          const d = loadRowsRaw();
-          d[colIndex][key] = v || "";
-          saveRows(d);
-        };
-        // on blur, re-render to reflect any normalization and update UI
-        timeEl.onchange = () => { renderTransposed(); };
+  } else if (isTime){
+    const timeEl = document.createElement('input'); timeEl.type='time'; timeEl.className='time-visible';
+    const stored = String(rec[key]||"").trim();
+    const as24 = parseFlexibleTimeTo24(stored);
+    if(as24) timeEl.value = as24;
+    timeEl.oninput = (e) => { const v = e.target.value; const d = loadRowsRaw(); d[colIndex][key] = v || ""; saveRows(d); };
+    timeEl.onchange = () => { renderTransposed(); };
+    timeEl.ondblclick = () => { const d = loadRowsRaw(); d[colIndex][key] = ""; saveRows(d); renderTransposed(); };
+    cell.appendChild(timeEl);
 
-        // double-click to clear
-        timeEl.ondblclick = () => { const d = loadRowsRaw(); d[colIndex][key] = ""; saveRows(d); renderTransposed(); };
-
-        cell.appendChild(timeEl);
-
-      } else {
-        const numericHeads = ["total","qty","input","output","water","f-1","f-2","residue","drain","packing","cost","sr. no","main recovery","composite yield"];
-        const isNumeric = numericHeads.some(nh => lower.includes(nh));
-        const input = document.createElement('input'); input.type = isNumeric ? 'number' : 'text'; input.value = rec[key] ?? "";
-        input.onchange = (e) => { const d = loadRowsRaw(); let v = e.target.value; if(input.type==='number'){ const n=parseFloat(String(v).replace(/,/g,'')); v = isNaN(n)?v:n } d[colIndex][key]=v; saveRows(d); renderTransposed(); };
-        cell.appendChild(input);
-      }
+  } else {
+    const numericHeads = ["total","qty","input","output","water","f-1","f-2","residue","drain","packing","cost","sr. no","main recovery","composite yield"];
+    const isNumeric = numericHeads.some(nh => lower.includes(nh));
+    const input = document.createElement('input'); input.type = isNumeric ? 'number' : 'text'; input.value = rec[key] ?? "";
+    input.onchange = (e) => { const d = loadRowsRaw(); let v = e.target.value; if(input.type==='number'){ const n=parseFloat(String(v).replace(/,/g,'')); v = isNaN(n)?v:n } d[colIndex][key]=v; saveRows(d); renderTransposed(); };
+    cell.appendChild(input);
+  }
 
       inner.appendChild(cell);
-    });
+});
+
+    // After the last field (Remark), add per-column action buttons: Save Field & Clear Fields
+    // per-column action area removed
+      // (per-column action buttons removed — global Save/Clear fields available at bottom)
+    // actions are now global (single Save + Clear) — no per-column actions
+
 
     col.appendChild(inner);
     area.appendChild(col);
@@ -494,6 +605,13 @@ function renderTransposed(){
   if(data.length===0){
     const p = document.createElement('div'); p.style.padding='16px'; p.textContent='No records. Click Add Record.'; area.appendChild(p);
   }
+  // make editor visible: show global save/clear buttons
+  try{
+    const sb = document.getElementById('saveBtn'); const cb = document.getElementById('clearAllFieldsBtn');
+    if(sb) sb.style.display = 'inline-block';
+    if(cb) cb.style.display = 'inline-block';
+  }catch(e){}
+  window.__LAST_RENDER_MODE = 'editor';
 }
 
 /* parse date dd-mm-yyyy or dd/mm/yyyy to yyyy-mm-dd */
@@ -509,7 +627,7 @@ function parseToISODate(v){
 /* Add column (always allowed) and focus first input in new column */
 function addColumn(data){
   const rows = loadRowsRaw();
-  rows.push(data || defaultRecord());
+  rows.push(data || { __simple: true, quick_text: '' });
   saveRows(rows);
   renderTransposed();
   // after render, focus first non-hidden input of last column
@@ -527,7 +645,6 @@ function addColumn(data){
 
 /* delete/duplicate if needed (not hooked to UI buttons by default) */
 function deleteColumn(idx){
-  if(!confirm('Delete this record?')) return;
   const rows = loadRowsRaw();
   rows.splice(idx,1);
   if(rows.length===0) rows.push(defaultRecord());
@@ -624,53 +741,44 @@ document.getElementById('exportBtn').addEventListener('click', async ()=> {
 
 /* UI hooks */
 document.getElementById('addColBtn').addEventListener('click', ()=> addColumn());
+document.getElementById('clearAllFieldsBtn').addEventListener('click', ()=> { /* user requested immediate clear */ clearFields(); });
 document.getElementById('saveBtn').addEventListener('click', async ()=> {
-  const cleaned = sanitizeRecordsRaw();
-  if(!cleaned || cleaned.length===0) return toast('No rows to save');
+  // Save ALL global behavior: validate all rows then write them as a single batch
+  const rows = loadRowsRaw();
+  const { ok, invalid } = validateAllRows();
+  if(!ok){ markInvalidColumns(invalid); alert('Please fill all records before saving.'); return; }
+
+  // prepare payload (remove internal marker keys) - pass records directly
+  const payload = rows.map(r => {
+    if(r && r.__simple) return { quick_text: r.quick_text };
+    const o = {};
+    Object.keys(r||{}).forEach(k=>{ if(!String(k).startsWith('__')) o[k]=r[k]; });
+    return o;
+  });
+
   if(!db){
-    // fallback: save locally (keep a backup copy so saved rows are not lost when clearing the editor)
-    try{
-      const existing = JSON.parse(localStorage.getItem(LOCAL_SAVE_BACKUP_KEY) || '[]');
-      const updated = existing.concat(cleaned);
-      localStorage.setItem(LOCAL_SAVE_BACKUP_KEY, JSON.stringify(updated));
-    }catch(e){ console.warn('backup save failed', e); }
-    // then clear the editor inputs
-    clearAllInputs(); toast('Saved locally (Firestore not available) — editor cleared'); return;
+    // fallback local: keep backup and clear inputs
+    try{ const existing = JSON.parse(localStorage.getItem(LOCAL_SAVE_BACKUP_KEY) || '[]'); const updated = existing.concat(payload); localStorage.setItem(LOCAL_SAVE_BACKUP_KEY, JSON.stringify(updated)); }catch(e){ console.warn('backup save failed', e); }
+    clearAllFields(); toast('Saved locally (Firestore not available) — fields cleared'); return;
   }
+
   try{
-    // if we're editing a single existing doc, update that document instead of creating new rows
-    if(window.__EDIT_DOC_ID){
-      const toUpdate = Array.isArray(cleaned) && cleaned.length ? cleaned[0] : null;
-      if(!toUpdate) return toast('No editable data present');
-      const upd = await updateFirestoreDoc(window.__EDIT_DOC_ID, toUpdate);
-      if(upd && upd.updated){
-        clearAllInputs();
-        window.__EDIT_DOC_ID = null;
-        toast('Record updated');
-      }
-      await loadFromFirestore();
+    const res = await saveToFirestore(payload);
+    // normalized response could be {saved: n} or an array
+    const savedCount = (res && res.saved) ? res.saved : (Array.isArray(res)?res.length:0);
+    if(savedCount>0){
+      clearAllFields(); toast('Data saved successfully!');
+      const s = document.getElementById('fbStatus'); if(s) s.textContent = 'DB: saved ' + savedCount + ' rows';
     } else {
-      const res = await saveToFirestore(cleaned);
-      if(res && res.saved){
-        // cloud write succeeded — clear editor inputs and then show DB table
-        clearAllInputs();
-        toast('Saved ' + res.saved + ' rows to database');
-        const s = document.getElementById('fbStatus'); if(s) s.textContent = 'DB: saved ' + res.saved + ' rows';
-      } else {
-        toast('No rows were saved to DB');
-      }
-      await loadFromFirestore();
+      toast('No rows were saved to DB');
     }
+    // don't switch to DB table automatically; stay in editor with cleared fields
   }catch(err){
     console.error(err);
-    // fallback: permission or auth errors -> save locally
     const msg = String(err && (err.code || err.message || err)).toLowerCase();
     if(msg.includes('permission') || msg.includes('not authenticated') || msg.includes('auth')){
-      // permission/auth issue — persist a local backup copy and clear the editor
-      try{ const existing = JSON.parse(localStorage.getItem(LOCAL_SAVE_BACKUP_KEY) || '[]'); const updated = existing.concat(cleaned); localStorage.setItem(LOCAL_SAVE_BACKUP_KEY, JSON.stringify(updated)); }catch(e){ console.warn('backup save failed', e); }
-      clearAllInputs();
-      toast('Permissions blocked DB — saved locally and editor cleared');
-      const s = document.getElementById('fbStatus'); if(s) s.textContent = 'DB: permission denied (saved locally)';
+      try{ const existing = JSON.parse(localStorage.getItem(LOCAL_SAVE_BACKUP_KEY) || '[]'); const updated = existing.concat(payload); localStorage.setItem(LOCAL_SAVE_BACKUP_KEY, JSON.stringify(updated)); }catch(e){ console.warn('backup save failed', e); }
+      clearAllFields(); toast('Permissions blocked DB — saved locally and fields cleared'); const s = document.getElementById('fbStatus'); if(s) s.textContent = 'DB: permission denied (saved locally)';
     } else {
       toast('Save to DB failed (see console)');
     }
