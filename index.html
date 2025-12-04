@@ -50,6 +50,7 @@
     .controls { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
     .btn { background: linear-gradient(135deg, var(--blue), var(--blue-light)); color:#fff; padding:10px 14px; border-radius:10px; border:0; font-weight:700; cursor:pointer }
     .btn.ghost { background:#fff; color:var(--blue-dark); border:2px solid var(--border-light); box-shadow:none }
+    .btn:disabled { background:#ccc; cursor:not-allowed; opacity:0.6; }
 
     /* Outlined transposed table */
     .transposed-wrap { border:1px solid var(--border-light); border-radius:10px; overflow:auto; background:#fff }
@@ -61,22 +62,29 @@
     .field-label { padding:10px 16px; border-bottom:1px solid var(--border-light); font-weight:700; color:var(--blue-dark); min-height:64px; display:flex; align-items:center }
 
     /* record columns */
-    .record-col { min-width:300px; border-right:1px solid var(--border-light); background:#fff; display:flex; flex-direction:column; }
+    .record-col { min-width:260px; border-right:1px solid var(--border-light); background:#fff; display:flex; flex-direction:column; }
     .record-header { padding:12px 14px; border-bottom:1px solid var(--border-light); text-align:center; font-weight:700; color:var(--slate) }
     .record-col-inner { display:flex; flex-direction:column; }
 
     /* important: same height for label and input rows for perfect alignment */
     .cell { padding:8px 12px; border-bottom:1px solid var(--border-light); min-height:64px; display:flex; align-items:center; background:#fff }
     .cell input[type="text"], .cell input[type="number"], .cell input[type="date"], .cell input[type="time"] {
-        width:100%; padding:10px 12px; border:2px solid var(--border); border-radius:8px; font-size:0.95rem; background:#fff; color:var(--slate);
-        height:44px; box-sizing:border-box;
+      width:100%; padding:10px 12px; border:2px solid var(--border); border-radius:8px; font-size:0.95rem; background:#fff; color:var(--slate);
+      height:44px; box-sizing:border-box; max-width:260px;
     }
       .cell input.invalid { border-color: #ef4444 !important; box-shadow: 0 0 0 6px rgba(239,68,68,0.08); }
+      .cell input.required-empty { border-color: #ef4444 !important; box-shadow: 0 0 0 6px rgba(239,68,68,0.08); background: #fff5f5 !important; }
     .cell input[type="text"]:focus, .cell input[type="number"]:focus, .cell input[type="date"]:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 6px rgba(59,130,246,0.06) }
 
     /* native time input: match other input styles */
-    .time-visible, input[type="time"] { width:100%; padding:10px 12px; border:2px solid var(--border); border-radius:8px; height:44px; box-sizing:border-box; background:#fff }
+    .time-visible, input[type="time"] { width:100%; padding:10px 12px; border:2px solid var(--border); border-radius:8px; height:44px; box-sizing:border-box; background:#fff; font-size:0.95rem; color:var(--slate); max-width:260px; }
     .time-visible:focus, input[type="time"]:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 6px rgba(59,130,246,0.06) }
+    .time-visible.required-empty { border-color: #ef4444 !important; box-shadow: 0 0 0 6px rgba(239,68,68,0.08); background: #fff5f5 !important; }
+
+    /* datetime-local input: 24-hour format */
+    input[type="datetime-local"] { width:100%; padding:10px 12px; border:2px solid var(--border); border-radius:8px; height:44px; box-sizing:border-box; background:#fff; font-size:0.95rem; color:var(--slate); font-family: 'Segoe UI', monospace; max-width:260px; }
+    input[type="datetime-local"]:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 6px rgba(59,130,246,0.06) }
+    input[type="datetime-local"].invalid { border-color: #ef4444 !important; box-shadow: 0 0 0 6px rgba(239,68,68,0.08); }
 
     /* responsive: stack columns on small screens */
     @media (max-width:900px){
@@ -115,20 +123,33 @@
     .record-header { text-align: left; font-size: 0.98rem; padding: 10px 12px; }
 
     /* make inputs full width (they already are, but ensure) */
-    .cell input[type="text"], .cell input[type="number"], .cell input[type="date"], .cell input[type="time"] {
+    .cell input[type="text"], .cell input[type="number"], .cell input[type="date"], .cell input[type="time"], input[type="datetime-local"] {
         width: 100%;
     }
 }
 
-/* Show Entries (DB table) responsive rules */
-.transposed-wrap .table-wrapper{ overflow-x:auto }
-.transposed-wrap table { width:100%; border-collapse:collapse; font-family: inherit; }
-.transposed-wrap th, .transposed-wrap td { padding:8px; border:1px solid var(--border-light); vertical-align: middle; }
-.transposed-wrap th { position: sticky; top:0; background:#f8fafc; z-index:2; text-align:left }
-@media (max-width:720px){
-  .transposed-wrap table { font-size:0.86rem; }
-  .transposed-wrap td { white-space:normal; word-break:break-word }
-}
+    /* Table styling for Show Entries: consistent widths and alignment */
+    table { border-collapse:collapse; width:100%; }
+    table th, table td { 
+        border:1px solid var(--border-light); 
+        padding:12px; 
+        text-align:left; 
+        word-wrap:break-word; 
+        max-width:150px;
+        overflow:hidden;
+        text-overflow:ellipsis;
+    }
+    table th { 
+        background:#f8fafc; 
+        font-weight:700; 
+        color:var(--slate); 
+        position:sticky; 
+        top:0; 
+        z-index:10;
+    }
+    table td { background:#fff; color:var(--slate); font-size:0.9rem; }
+    table tr:hover { background:#f8fafc; }
+    table button { margin:0 4px; padding:6px 10px; font-size:0.85rem; }
 
 </style>
 </head>
@@ -179,10 +200,10 @@
 const ALL_HEADERS = [
   "Sr. No.","Reactor No","Product Name","Category","Batch start date","Start time",
   "Heating start time","Total reflux time","Total fraction cut collection time",
-  "Total feeding time","Total Main collection time","heating stop time","total heating hours",
-  "Batch Stop Date","Batch stop time","Total Process Time","Total Input","output",
-  "Water","F-1","F-2","Residue","drain qty while sampling","Packing Size",
-  "total drum packed","Packing MOC","Main Recovery%","Composite yield %","Cost","Remark"
+  "Total feeding time","Total Main collection time","Heating stop time","Total heating hours",
+  "Batch Stop Date","Batch stop time","Total Process Time","Total Input","Output",
+  "Water","F-1","F-2","Residue","Drain qty while sampling",
+  "Main Recovery%","Composite yield %","Cost","Remark"
 ];
 
 /* header -> key */
@@ -196,6 +217,60 @@ const HEADERS = ALL_HEADERS.filter(h => String(h).toLowerCase() !== 'sr. no.');
 const STORAGE_KEY = "production_transposed_v1";
 // when Firestore is unavailable and we save locally, keep a backup copy here
 const LOCAL_SAVE_BACKUP_KEY = STORAGE_KEY + '_saved_backup';
+
+// Fields that represent durations (not clock times)
+const DURATION_FIELDS = [
+  'total reflux time',
+  'total fraction cut collection time',
+  'total feeding time',
+  'total main collection time'
+];
+
+// Fields that must be numeric only
+const NUMERIC_ONLY_FIELDS = [
+  'total input',
+  'output',
+  'water',
+  'f-1',
+  'f-2',
+  'residue',
+  'drain qty while sampling'
+];
+
+// Helpers for duration parsing/formatting: store as HH:MM (hours:minutes)
+function parseDurationString(v){
+  if(!v) return {h:'00', m:'00'};
+  const s = String(v).trim();
+  // legacy: "NN hours NN minutes"
+  const m1 = s.match(/(\d{1,3})\s*hours?\s*(\d{1,2})\s*minutes?/i);
+  if(m1) return { h: String(Number(m1[1])).padStart(2,'0'), m: String(Number(m1[2])).padStart(2,'0') };
+  // HH:MM
+  const m2 = s.match(/^(\d{1,3}):(\d{2})$/);
+  if(m2) return { h: String(Number(m2[1])).padStart(2,'0'), m: String(Number(m2[2])).padStart(2,'0') };
+  return {h:'00', m:'00'};
+}
+function formatDuration(h,m){
+  const hh = String(h||'').padStart(2,'0');
+  const mm = String(m||'').padStart(2,'0');
+  return `${hh}:${mm}`;
+}
+
+// Helpers for datetime-local values (YYYY-MM-DDTHH:MM)
+function toDateTimeLocalValue(v){
+  if(!v) return '';
+  // accept ISO-like strings or space-separated date+time
+  let s = String(v).trim();
+  // if already in YYYY-MM-DDTHH:MM format
+  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return s.slice(0,16);
+  // if ISO with space
+  const isoSpace = s.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2})/);
+  if(isoSpace) return `${isoSpace[1]}T${isoSpace[2]}`;
+  // if separate date and time
+  const dateMatch = s.match(/(\d{4}-\d{2}-\d{2})/);
+  const timeMatch = s.match(/(\d{1,2}:\d{2})/);
+  if(dateMatch && timeMatch) return `${dateMatch[1]}T${timeMatch[1].padStart(5,'0')}`;
+  return '';
+}
 
 /* default record */
 function defaultRecord(){ const obj = {}; Object.values(headerToKey).forEach(k => obj[k]=""); return obj; }
@@ -244,13 +319,64 @@ function clearFields(){
 // Validate all current rows: returns { ok: bool, invalid: [indices] }
 function validateAllRows(){
   const rows = loadRowsRaw(); const invalid = [];
+  const calculatedFieldKeys = [
+    headerToKey['Total Process Time'],
+    headerToKey['Cost'],
+    headerToKey['Main Recovery%'],
+    headerToKey['Composite yield %']
+  ];
+  
   rows.forEach((r, idx)=>{
     if(r && r.__simple){ if(!String(r.quick_text||'').trim()) invalid.push(idx); }
     else {
-      // require at least one non-empty, non-special string field
-      const hasText = Object.keys(r||{}).some(k => !String(k).startsWith('__') && r[k] !== undefined && r[k] !== null && String(r[k]).trim() !== '');
+      // require at least one non-empty, non-special, non-calculated field
+      const hasText = Object.keys(r||{}).some(k => 
+        !String(k).startsWith('__') && 
+        !calculatedFieldKeys.includes(k) &&
+        r[k] !== undefined && 
+        r[k] !== null && 
+        String(r[k]).trim() !== ''
+      );
       if(!hasText) invalid.push(idx);
     }
+  });
+  // Additional format validation for specific fields
+  const time24SecondsRegex = /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
+  const dateTimeRegex = /^\d{2}-\d{2}-\d{4}\s+(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
+  const durationFormatRegex = /^\d{1,2}:\d{2}$/;
+  
+  rows.forEach((r, idx) => {
+    if(!r || r.__simple) return;
+    // start time must be 24-hour HH:MM:SS (max 23:59:59)
+    if(r['start_time'] !== undefined && String(r['start_time']).trim() !== '' && !time24SecondsRegex.test(String(r['start_time']).trim())){
+      if(!invalid.includes(idx)) invalid.push(idx);
+    }
+    // heating stop time must be dd-mm-yyyy hh:mm:ss
+    if(r['heating_stop_time'] !== undefined && String(r['heating_stop_time']).trim() !== '' && !dateTimeRegex.test(String(r['heating_stop_time']).trim())){
+      if(!invalid.includes(idx)) invalid.push(idx);
+    }
+    // duration fields: must be in HH:MM format if not empty
+    DURATION_FIELDS.forEach(df => {
+      const k = String(df).toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
+      if(r[k] !== undefined && String(r[k]).trim() !== ''){
+        const val = String(r[k]).trim();
+        // Must match HH:MM format exactly
+        if(!durationFormatRegex.test(val)){
+          if(!invalid.includes(idx)) invalid.push(idx);
+        } else {
+          // Validate ranges
+          const match = val.match(/^(\d{1,2}):(\d{2})$/);
+          if(match){
+            const hh = Number(match[1]);
+            const mm = Number(match[2]);
+            if(mm < 0 || mm > 59 || hh < 0){
+              if(!invalid.includes(idx)) invalid.push(idx);
+            }
+          }
+        }
+      }
+    });
+
   });
   return { ok: invalid.length===0, invalid };
 }
@@ -271,8 +397,45 @@ function clearColumnInputs(idx){
 
 /* sanitize: remove fully-empty records (all fields blank) */
 function sanitizeRecordsRaw(){
-  const raw = loadRowsRaw();
-  const cleaned = raw.filter(rec => Object.values(rec).some(v => v !== "" && v !== null && v !== undefined && String(v).trim() !== ""));
+  const raw = (function(){
+    // read raw stored rows without sanitization
+    const s = localStorage.getItem(STORAGE_KEY);
+    if(!s) return [];
+    try{ const arr = JSON.parse(s); return Array.isArray(arr)?arr:[]; }catch(e){ return []; }
+  })();
+
+  const cleaned = [];
+  const validKeys = Object.keys(defaultRecord());
+
+  raw.forEach((rec, idx) => {
+    if(!rec || typeof rec !== 'object') return;
+
+    // If legacy simple record (compact), map quick_text into remark
+    if(rec.__simple){
+      const nr = defaultRecord();
+      if(rec.quick_text) nr[ headerToKey['Remark'] || 'remark' ] = rec.quick_text;
+      cleaned.push(nr);
+      return;
+    }
+
+    // Build a normalized record containing only known keys
+    const nr = defaultRecord();
+    Object.keys(rec).forEach(k => {
+      if(String(k).startsWith('__')) return; // skip internal markers
+      if(validKeys.includes(k)) nr[k] = rec[k];
+      // also accept legacy keys that may map to current keys (e.g., f1 vs f-1)
+      else if(k === 'f1' && validKeys.includes('f_1')) nr['f_1'] = rec[k];
+      else if(k === 'f2' && validKeys.includes('f_2')) nr['f_2'] = rec[k];
+      else if(k === 'packing_size' && validKeys.includes('packing_size')) nr['packing_size'] = rec[k];
+      else if(k === 'total_drum_packed' && validKeys.includes('total_drum_packed')) nr['total_drum_packed'] = rec[k];
+      else if(k === 'packing_moc' && validKeys.includes('packing_moc')) nr['packing_moc'] = rec[k];
+    });
+
+    // If record contains any non-empty value, keep it
+    const hasAny = Object.values(nr).some(v => v !== '' && v !== null && v !== undefined && String(v).trim() !== '');
+    if(hasAny) cleaned.push(nr);
+  });
+
   if(cleaned.length === 0) return [defaultRecord()];
   return cleaned;
 }
@@ -282,6 +445,62 @@ function loadData(){
   const cleaned = sanitizeRecordsRaw();
   saveRows(cleaned);
   return cleaned;
+}
+
+/* DEBUG: Log all field mappings */
+function logFieldMappings(){
+  console.log('===== FIELD MAPPING DIAGNOSTICS =====');
+  console.log('ALL_HEADERS count:', ALL_HEADERS.length);
+  console.log('ALL_HEADERS:', ALL_HEADERS);
+  console.log('\nheaderToKey mappings:');
+  ALL_HEADERS.forEach(h => {
+    console.log(`  "${h}" -> "${headerToKey[h]}"`);
+  });
+  console.log('\nNUMERIC_ONLY_FIELDS:', NUMERIC_ONLY_FIELDS);
+  console.log('DURATION_FIELDS:', DURATION_FIELDS);
+  console.log('\nSample defaultRecord:', defaultRecord());
+  console.log('defaultRecord keys count:', Object.keys(defaultRecord()).length);
+}
+
+/* Validate all fields in a single record are filled */
+function validateRecordAllFieldsFilled(rec, colIndex){
+  const inputs = document.querySelectorAll(`.record-col:nth-child(${colIndex + 2}) .cell input, .record-col:nth-child(${colIndex + 2}) .cell .time-visible, .record-col:nth-child(${colIndex + 2}) .cell .calculated-display`);
+  let allFilled = true;
+  
+  inputs.forEach(input => {
+    const val = String(input.value || '').trim();
+    // Skip calculated fields (they auto-populate)
+    if(input.classList.contains('calculated-display') || input.disabled) return;
+    
+    if(!val){
+      input.classList.add('required-empty');
+      allFilled = false;
+    } else {
+      input.classList.remove('required-empty');
+    }
+  });
+  
+  return allFilled;
+}
+
+/* Validate all records have all fields filled */
+function validateAllRecordsComplete(){
+  const data = loadData();
+  let allValid = true;
+  
+  data.forEach((rec, idx) => {
+    const isValid = validateRecordAllFieldsFilled(rec, idx);
+    if(!isValid) allValid = false;
+  });
+  
+  return allValid;
+}
+
+/* Clear required-empty indicators */
+function clearValidationIndicators(){
+  document.querySelectorAll('.required-empty').forEach(el => {
+    el.classList.remove('required-empty');
+  });
 }
 
 // ----------------------
@@ -366,14 +585,42 @@ document.addEventListener('click', (e)=>{
 
 // Helper: save an array of records into Firestore, auto-assigning sr_no using a counter document
 async function saveToFirestore(records){
+  console.log('===== START saveToFirestore =====');
+  console.log('Input records count:', records ? records.length : 0);
+  console.log('Input records:', records);
+  
   if(!db) throw new Error('Firestore not initialized');
   const ok = await ensureAuth();
   if(!ok) throw new Error('Not authenticated for Firestore operations');
   const counterRef = db.collection('metadata').doc('counters');
   const prodRef = db.collection('production_records');
-  // Batch-style: compute how many valid records we actually need to write and assign sequential sr_no values in a single transaction.
-  const toSave = (records || []).filter(rec => rec && !Object.values(rec).every(v=>v===""||v===null||v===undefined));
-  if(toSave.length === 0) return { saved: 0 };
+  
+  // Filter out records that are completely empty (all fields blank or null)
+  // Note: Don't filter based on ALL values being empty - save records even if they have sparse data
+  const toSave = (records || []).filter(rec => {
+    if(!rec) {
+      console.log('Filtering out: record is null/undefined');
+      return false;
+    }
+    // Check if record has any non-empty, non-internal field
+    const hasData = Object.entries(rec).some(([k, v]) => 
+      !String(k).startsWith('__') && 
+      v !== "" && 
+      v !== null && 
+      v !== undefined
+    );
+    if(!hasData) console.log('Filtering out: record has no non-empty fields', rec);
+    return hasData;
+  });
+  
+  console.log('Records to save after filtering:', toSave.length);
+  console.log('Filtered records:', toSave);
+  
+  if(toSave.length === 0) { 
+    console.warn('No non-empty records to save'); 
+    console.log('===== END saveToFirestore (no records) =====');
+    return { saved: 0 }; 
+  }
 
   try{
     await db.runTransaction(async tx => {
@@ -391,11 +638,15 @@ async function saveToFirestore(records){
         payload.createdAt = firebase.firestore.FieldValue.serverTimestamp ? firebase.firestore.FieldValue.serverTimestamp() : new Date().toISOString();
         const newDoc = prodRef.doc();
         tx.set(newDoc, payload);
+        console.log('Saving record ' + (i+1) + ' with sr_no: ' + payload.sr_no);
       }
     });
+    console.log('Successfully saved ' + toSave.length + ' records to Firestore');
     return { saved: toSave.length };
   }catch(err){
     console.error('saveToFirestore error', err);
+    console.error('Error code:', err.code);
+    console.error('Error message:', err.message);
     throw err;
   }
 }
@@ -458,7 +709,7 @@ async function loadFromFirestore(){
 function renderTable(records){
   const area = document.getElementById('transposedArea');
   area.innerHTML = '';
-  const wrap = document.createElement('div'); wrap.className='table-wrapper'; wrap.style.padding = '12px';
+  const wrap = document.createElement('div'); wrap.style.padding = '12px';
   const table = document.createElement('table'); table.style.width='100%'; table.style.borderCollapse='collapse';
   table.style.fontSize='0.9rem';
   const thead = document.createElement('thead');
@@ -492,38 +743,166 @@ function renderTable(records){
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
-  // make table wide enough to be readable on small screens and allow scrolling
-  table.style.minWidth = Math.max(600, headerRow.length * 110) + 'px';
   wrap.appendChild(table);
   area.appendChild(wrap);
-  // ensure global editor buttons remain accessible (buttons live outside the table view)
-  try{ const sb = document.getElementById('saveBtn'); const cb = document.getElementById('clearAllFieldsBtn'); if(sb) sb.style.display='inline-block'; if(cb) cb.style.display='inline-block'; }catch(e){}
   // mark last render mode
   window.__LAST_RENDER_MODE = 'table';
 }
 
 /* helpers for time */
 function pad(n){ return n<10 ? '0'+n : String(n); }
-function formatTimeToAMPMFrom24(hhmm){ if (!hhmm && hhmm !== 0) return ""; const parts = String(hhmm).split(':'); if (parts.length < 2) return hhmm; let hh = parseInt(parts[0],10), mm = parseInt(parts[1],10); if (isNaN(hh)||isNaN(mm)) return hhmm; const ampm = hh>=12?'PM':'AM'; hh=hh%12; if(hh===0) hh=12; return pad(hh)+':'+pad(mm)+' '+ampm; }
-function parseAMPMTo24(am){ if(!am) return ""; const m = String(am).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i); if(!m) return ""; let h = parseInt(m[1],10), mm = m[2], ap = m[3].toUpperCase(); if(ap==='AM' && h===12) h=0; if(ap==='PM' && h!==12) h+=12; return pad(h)+':'+mm; }
-function parseFlexibleTimeTo24(v){
-  if(!v) return ""; v=String(v).trim();
-  if(/^\d{1,2}:\d{2}$/.test(v)){ const [h,m]=v.split(':').map(Number); if(h>=0 && h<24 && m>=0 && m<60) return pad(h)+':'+pad(m); }
-  const ampmMatch = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i); if(ampmMatch) return parseAMPMTo24(ampmMatch[0]);
-  const digits = v.replace(/\D/g,'');
-  // guard against treating 4-digit year-like numbers (e.g., 2024) as times. If digits is a 4-digit
-  // number in the range 1900-2100, treat it as a year and do NOT parse into a time.
-  if(/^\d{3,4}$/.test(digits)){
-    if(digits.length===4){ const asNum = Number(digits); if(asNum>=1900 && asNum<=2100) return ""; }
-    if(digits.length===3){ const h=Number(digits.slice(0,1)), m=Number(digits.slice(1)); if(h>=0 && h<24 && m>=0 && m<60) return pad(h)+':'+pad(m); }
-    else { const h=Number(digits.slice(0,2)), m=Number(digits.slice(2)); if(h>=0 && h<24 && m>=0 && m<60) return pad(h)+':'+pad(m); }
+// Parse time string to strict 24-hour format HH:MM (no AM/PM)
+function parseTime24(v){
+  if(!v) return "";
+  v = String(v).trim();
+  // Already in 24-hour format
+  if(/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(v)) return v;
+  // Try to extract HH:MM from any format
+  const match = v.match(/(\d{1,2}):(\d{2})/);
+  if(match){
+    const h = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    if(h >= 0 && h < 24 && m >= 0 && m < 60) return pad(h) + ':' + pad(m);
   }
   return "";
+}
+
+// Compute Total Process Time for a record by summing duration fields (HH:MM)
+// Returns empty string if no duration fields are filled
+function computeTotalProcessTimeForRecord(rec){
+  if(!rec) return '';
+  let totalMins = 0;
+  let hasAnyDuration = false;
+  DURATION_FIELDS.forEach(df => {
+    const k = String(df).toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
+    const val = String(rec[k] || '').trim();
+    if(!val) return;
+    hasAnyDuration = true;
+    const p = parseDurationString(val);
+    const hh = Number(p.h || 0);
+    const mm = Number(p.m || 0);
+    if(!isNaN(hh) && !isNaN(mm)) totalMins += (hh*60 + mm);
+  });
+  // If no duration fields filled, return empty and clear the stored value
+  if(!hasAnyDuration){
+    const totalKey = headerToKey['Total Process Time'];
+    if(totalKey) rec[totalKey] = '';
+    return '';
+  }
+  const th = Math.floor(totalMins / 60);
+  const tm = totalMins % 60;
+  const out = String(th).padStart(2,'0') + ':' + String(tm).padStart(2,'0');
+  const totalKey = headerToKey['Total Process Time'];
+  if(totalKey) rec[totalKey] = out;
+  return out;
+}
+
+// Compute Main Recovery % = (Total Input / Output) * 100
+function computeMainRecoveryPercent(rec){
+  if(!rec) return '';
+  const totalInputKey = headerToKey['Total Input'];
+  const outputKey = headerToKey['Output'];
+  const mainRecoveryKey = headerToKey['Main Recovery%'];
+  if(!totalInputKey || !outputKey || !mainRecoveryKey) return '';
+  
+  const ti = String(rec[totalInputKey] || '').trim();
+  const out = String(rec[outputKey] || '').trim();
+  if(!ti || !out) { rec[mainRecoveryKey] = ''; return ''; }
+  
+  const tiNum = parseFloat(ti);
+  const outNum = parseFloat(out);
+  if(isNaN(tiNum) || isNaN(outNum) || outNum === 0) { rec[mainRecoveryKey] = ''; return ''; }
+  
+  const result = (tiNum / outNum * 100).toFixed(2);
+  rec[mainRecoveryKey] = result;
+  return result;
+}
+
+// Compute Composite Yield = F1 + F2 + Residue + Drain qty while sampling + Output + Water + Total Input
+function computeCompositeYield(rec){
+  if(!rec) return '';
+  const fields = ['F-1', 'F-2', 'Residue', 'Drain qty while sampling', 'Output', 'Water', 'Total Input'];
+  const compositeKey = headerToKey['Composite yield %'];
+  if(!compositeKey) return '';
+  
+  let sum = 0;
+  for(const fieldName of fields){
+    const key = headerToKey[fieldName];
+    if(!key) continue;
+    const val = String(rec[key] || '').trim();
+    if(!val) continue;
+    const num = parseFloat(val);
+    if(!isNaN(num)) sum += num;
+  }
+  
+  const result = sum.toFixed(2);
+  rec[compositeKey] = result;
+  return result;
+}
+
+// Compute Cost = Total Process Time * 4000
+// Total Process Time is in HH:MM format, convert to decimal HH.MM and multiply
+// Returns empty string if Total Process Time is empty
+function computeCost(rec){
+  if(!rec) return '';
+  const totalProcessTimeKey = headerToKey['Total Process Time'];
+  const costKey = headerToKey['Cost'];
+  if(!totalProcessTimeKey || !costKey) return '';
+  
+  const timeStr = String(rec[totalProcessTimeKey] || '').trim();
+  // If Total Process Time is empty, clear cost
+  if(!timeStr) { rec[costKey] = ''; return ''; }
+  
+  // Parse HH:MM format
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+  if(!match) { rec[costKey] = ''; return ''; }
+  
+  const hh = Number(match[1]);
+  const mm = Number(match[2]);
+  
+  // Convert HH:MM to decimal HH.MM
+  const decimal = hh + (mm / 100);
+  
+  // Calculate cost
+  const cost = (decimal * 4000).toFixed(2);
+  rec[costKey] = cost;
+  return cost;
+}
+
+function computeTotalsForAllRecords(){
+  const rows = loadRowsRaw(); let changed = false;
+  for(let i=0;i<rows.length;i++){
+    const rec = rows[i];
+    if(!rec) continue;
+    
+    // Total Process Time
+    const beforeTime = String(rec[ headerToKey['Total Process Time'] ] || '');
+    const afterTime = computeTotalProcessTimeForRecord(rec);
+    if(beforeTime !== afterTime) changed = true;
+    
+    // Main Recovery %
+    const beforeMainRecovery = String(rec[ headerToKey['Main Recovery%'] ] || '');
+    const afterMainRecovery = computeMainRecoveryPercent(rec);
+    if(beforeMainRecovery !== afterMainRecovery) changed = true;
+    
+    // Composite Yield
+    const beforeComposite = String(rec[ headerToKey['Composite yield %'] ] || '');
+    const afterComposite = computeCompositeYield(rec);
+    if(beforeComposite !== afterComposite) changed = true;
+    
+    // Cost
+    const beforeCost = String(rec[ headerToKey['Cost'] ] || '');
+    const afterCost = computeCost(rec);
+    if(beforeCost !== afterCost) changed = true;
+  }
+  if(changed) saveRows(rows);
 }
 
 /* render transposed */
 function renderTransposed(){
   const area = document.getElementById('transposedArea');
+  // Ensure Total Process Time is computed for all records before rendering
+  computeTotalsForAllRecords();
   const data = window.__TRANS_DATA = loadData();
   area.innerHTML = "";
 
@@ -549,8 +928,13 @@ function renderTransposed(){
   const key = headerToKey[h];
   const cell = document.createElement('div'); cell.className='cell';
   const lower = h.toLowerCase();
-  const isDate = lower.includes('date') || lower.includes('batch start') || lower.includes('batch stop');
-  const isTime = /\btime\b/.test(lower) || lower.includes('start time') || lower.includes('stop time') || lower.includes('heating start time') || lower.includes('heating stop time');
+  const isDuration = DURATION_FIELDS.some(df => lower.includes(df));
+  const isHeatingStopDateTime = lower.includes('heating stop time');
+  const isBatchStopTime = lower.includes('batch stop time') || lower.includes('batch stop');
+  const isDate = lower.includes('date') && !isHeatingStopDateTime; // keep date fields, but heating stop is datetime-local
+  const isTime = !isDuration && (/\btime\b/.test(lower) || lower.includes('start time') || lower.includes('stop time') || lower.includes('heating start time') || lower.includes('heating stop time'));
+  const isCalculated = lower.includes('main recovery') || lower.includes('composite yield') || lower.includes('total process time') || lower.includes('cost');
+
 
   // show inline label on small screens (we hide the left field-col via CSS)
   const isSmall = window.innerWidth <= 720;
@@ -561,30 +945,616 @@ function renderTransposed(){
     cell.appendChild(lab);
   }
 
-  if (isDate){
+  if (isCalculated){
+    // Read-only display for calculated fields — styled to match input widths
+    const display = document.createElement('div');
+    display.className = 'calculated-display';
+    display.style.padding = '10px 12px';
+    display.style.border = '2px solid var(--border-light)';
+    display.style.borderRadius = '8px';
+    display.style.height = '44px';
+    display.style.display = 'flex';
+    display.style.alignItems = 'center';
+    display.style.backgroundColor = '#f8fafc';
+    display.style.color = 'var(--slate)';
+    display.style.fontWeight = '500';
+    display.style.width = '100%';
+    display.style.maxWidth = '260px';
+    display.style.boxSizing = 'border-box';
+    display.style.overflow = 'hidden';
+    display.style.textOverflow = 'ellipsis';
+    display.style.whiteSpace = 'nowrap';
+    display.textContent = rec[key] ?? '';
+    cell.appendChild(display);
+
+  } else if (isDate){
     const input = document.createElement('input'); input.type='date'; input.placeholder='YYYY-MM-DD';
     if (rec[key]) {
       const iso = parseToISODate(rec[key]);
       if (iso) input.value = iso;
     }
+    // Add validation on blur/change
+    input.onblur = () => {
+      const val = String(input.value || '').trim();
+      if(!val) input.classList.add('required-empty');
+      else input.classList.remove('required-empty');
+    };
     input.onchange = (e) => { const d = loadRowsRaw(); const v = String(e.target.value||'').trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(v)) d[colIndex][key]=v; else d[colIndex][key]=''; saveRows(d); renderTransposed(); };
     cell.appendChild(input);
 
+  } else if (isHeatingStopDateTime){
+    // Heating stop: single display field (dd-mm-yyyy hh:mm:ss) with combined picker button
+    const container = document.createElement('div');
+    container.style.display = 'flex';
+    container.style.gap = '4px';
+    container.style.alignItems = 'center';
+    container.style.width = '100%';
+    
+    const display = document.createElement('input');
+    display.type = 'text';
+    display.placeholder = 'dd-mm-yyyy hh:mm:ss';
+    display.value = rec[key] ?? "";
+    display.style.flex = '1';
+    display.style.padding = '10px 12px';
+    display.style.border = '2px solid var(--border)';
+    display.style.borderRadius = '8px';
+    display.style.fontSize = '0.95rem';
+    display.style.backgroundColor = '#fff';
+    display.style.color = 'var(--slate)';
+    display.style.maxWidth = '260px';
+    
+    const pickerBtn = document.createElement('button');
+    pickerBtn.textContent = '📅';
+    pickerBtn.style.padding = '10px 12px';
+    pickerBtn.style.border = '2px solid var(--border)';
+    pickerBtn.style.borderRadius = '8px';
+    pickerBtn.style.backgroundColor = '#fff';
+    pickerBtn.style.cursor = 'pointer';
+    pickerBtn.style.fontSize = '1rem';
+    
+    const updateValue = (val) => {
+      const d = loadRowsRaw();
+      d[colIndex][key] = val;
+      saveRows(d);
+      display.value = val;
+    };
+    
+    display.onchange = (e) => { updateValue(e.target.value); renderTransposed(); };
+    
+    pickerBtn.onclick = () => {
+      const modal = document.createElement('div');
+      modal.style.position = 'fixed';
+      modal.style.top = '50%';
+      modal.style.left = '50%';
+      modal.style.transform = 'translate(-50%, -50%)';
+      modal.style.backgroundColor = '#fff';
+      modal.style.border = '2px solid var(--border)';
+      modal.style.borderRadius = '12px';
+      modal.style.padding = '20px';
+      modal.style.zIndex = '10000';
+      modal.style.boxShadow = '0 10px 40px rgba(0,0,0,0.2)';
+      modal.style.minWidth = '320px';
+      
+      const title = document.createElement('div');
+      title.textContent = 'Select Date & Time (dd-mm-yyyy hh:mm:ss)';
+      title.style.fontWeight = '700';
+      title.style.marginBottom = '16px';
+      modal.appendChild(title);
+      
+      // Parse current value
+      const current = display.value || '';
+      const [datePart, timePart] = current.split(' ');
+      const [dd, mm, yyyy] = datePart ? datePart.split('-') : ['01', '01', '2025'];
+      const [hh, min, ss] = timePart ? timePart.split(':') : ['00', '00', '00'];
+      
+      // Date inputs
+      const dateLabel = document.createElement('div');
+      dateLabel.textContent = 'Date (dd-mm-yyyy):';
+      dateLabel.style.fontWeight = '600';
+      dateLabel.style.marginBottom = '8px';
+      dateLabel.style.fontSize = '0.9rem';
+      modal.appendChild(dateLabel);
+      
+      const dateContainer = document.createElement('div');
+      dateContainer.style.display = 'flex';
+      dateContainer.style.gap = '8px';
+      dateContainer.style.marginBottom = '16px';
+      dateContainer.style.justifyContent = 'center';
+      
+      const dayInput = document.createElement('input');
+      dayInput.type = 'number';
+      dayInput.min = '1';
+      dayInput.max = '31';
+      dayInput.value = dd || '01';
+      dayInput.style.width = '60px';
+      dayInput.style.padding = '8px';
+      dayInput.style.border = '2px solid var(--border)';
+      dayInput.style.borderRadius = '8px';
+      dayInput.style.textAlign = 'center';
+      
+      const monthInput = document.createElement('input');
+      monthInput.type = 'number';
+      monthInput.min = '1';
+      monthInput.max = '12';
+      monthInput.value = mm || '01';
+      monthInput.style.width = '60px';
+      monthInput.style.padding = '8px';
+      monthInput.style.border = '2px solid var(--border)';
+      monthInput.style.borderRadius = '8px';
+      monthInput.style.textAlign = 'center';
+      
+      const yearInput = document.createElement('input');
+      yearInput.type = 'number';
+      yearInput.min = '1900';
+      yearInput.max = '2100';
+      yearInput.value = yyyy || '2025';
+      yearInput.style.width = '80px';
+      yearInput.style.padding = '8px';
+      yearInput.style.border = '2px solid var(--border)';
+      yearInput.style.borderRadius = '8px';
+      yearInput.style.textAlign = 'center';
+      
+      dateContainer.appendChild(dayInput);
+      const slash1 = document.createElement('span');
+      slash1.textContent = '-';
+      slash1.style.fontSize = '1.2rem';
+      slash1.style.fontWeight = '700';
+      dateContainer.appendChild(slash1);
+      dateContainer.appendChild(monthInput);
+      const slash2 = document.createElement('span');
+      slash2.textContent = '-';
+      slash2.style.fontSize = '1.2rem';
+      slash2.style.fontWeight = '700';
+      dateContainer.appendChild(slash2);
+      dateContainer.appendChild(yearInput);
+      modal.appendChild(dateContainer);
+      
+      // Time inputs
+      const timeLabel = document.createElement('div');
+      timeLabel.textContent = 'Time (hh:mm:ss):';
+      timeLabel.style.fontWeight = '600';
+      timeLabel.style.marginBottom = '8px';
+      timeLabel.style.fontSize = '0.9rem';
+      modal.appendChild(timeLabel);
+      
+      const timeContainer = document.createElement('div');
+      timeContainer.style.display = 'flex';
+      timeContainer.style.gap = '8px';
+      timeContainer.style.marginBottom = '16px';
+      timeContainer.style.justifyContent = 'center';
+      
+      const hourInput = document.createElement('input');
+      hourInput.type = 'number';
+      hourInput.min = '0';
+      hourInput.max = '23';
+      hourInput.value = String(parseInt(hh) || 0).padStart(2, '0');
+      hourInput.style.width = '60px';
+      hourInput.style.padding = '8px';
+      hourInput.style.border = '2px solid var(--border)';
+      hourInput.style.borderRadius = '8px';
+      hourInput.style.textAlign = 'center';
+      
+      const minInput = document.createElement('input');
+      minInput.type = 'number';
+      minInput.min = '0';
+      minInput.max = '59';
+      minInput.value = String(parseInt(min) || 0).padStart(2, '0');
+      minInput.style.width = '60px';
+      minInput.style.padding = '8px';
+      minInput.style.border = '2px solid var(--border)';
+      minInput.style.borderRadius = '8px';
+      minInput.style.textAlign = 'center';
+      
+      const secInput = document.createElement('input');
+      secInput.type = 'number';
+      secInput.min = '0';
+      secInput.max = '59';
+      secInput.value = String(parseInt(ss) || 0).padStart(2, '0');
+      secInput.style.width = '60px';
+      secInput.style.padding = '8px';
+      secInput.style.border = '2px solid var(--border)';
+      secInput.style.borderRadius = '8px';
+      secInput.style.textAlign = 'center';
+      
+      timeContainer.appendChild(hourInput);
+      const colon1 = document.createElement('span');
+      colon1.textContent = ':';
+      colon1.style.fontSize = '1.2rem';
+      colon1.style.fontWeight = '700';
+      timeContainer.appendChild(colon1);
+      timeContainer.appendChild(minInput);
+      const colon2 = document.createElement('span');
+      colon2.textContent = ':';
+      colon2.style.fontSize = '1.2rem';
+      colon2.style.fontWeight = '700';
+      timeContainer.appendChild(colon2);
+      timeContainer.appendChild(secInput);
+      modal.appendChild(timeContainer);
+      
+      // Buttons
+      const buttonsContainer = document.createElement('div');
+      buttonsContainer.style.display = 'flex';
+      buttonsContainer.style.gap = '8px';
+      buttonsContainer.style.justifyContent = 'center';
+      
+      const okBtn = document.createElement('button');
+      okBtn.textContent = 'OK';
+      okBtn.className = 'btn';
+      okBtn.style.padding = '8px 16px';
+      okBtn.onclick = () => {
+        const d = String(parseInt(dayInput.value) || 1).padStart(2, '0');
+        const m = String(parseInt(monthInput.value) || 1).padStart(2, '0');
+        const y = yearInput.value;
+        const h = String(parseInt(hourInput.value) || 0).padStart(2, '0');
+        const min = String(parseInt(minInput.value) || 0).padStart(2, '0');
+        const s = String(parseInt(secInput.value) || 0).padStart(2, '0');
+        updateValue(`${d}-${m}-${y} ${h}:${min}:${s}`);
+        document.body.removeChild(modal);
+        document.body.removeChild(overlay);
+      };
+      
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.className = 'btn ghost';
+      cancelBtn.style.padding = '8px 16px';
+      cancelBtn.onclick = () => {
+        document.body.removeChild(modal);
+        document.body.removeChild(overlay);
+      };
+      
+      buttonsContainer.appendChild(okBtn);
+      buttonsContainer.appendChild(cancelBtn);
+      modal.appendChild(buttonsContainer);
+      
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.top = '0';
+      overlay.style.left = '0';
+      overlay.style.right = '0';
+      overlay.style.bottom = '0';
+      overlay.style.backgroundColor = 'rgba(0,0,0,0.3)';
+      overlay.style.zIndex = '9999';
+      overlay.onclick = () => {
+        document.body.removeChild(modal);
+        document.body.removeChild(overlay);
+      };
+      
+      document.body.appendChild(overlay);
+      document.body.appendChild(modal);
+      dayInput.focus();
+    };
+    
+    container.appendChild(display);
+    container.appendChild(pickerBtn);
+    cell.appendChild(container);
+
+  } else if (isDuration){
+    // Duration input: strict HH:MM format validation
+    // On load, input is empty (not prefilled with 00:00)
+    const dur = parseDurationString(String(rec[key]||""));
+    const storedVal = String(rec[key]||"").trim();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'HH:MM';
+    // Empty on load; only show value if already stored
+    input.value = storedVal ? ((dur.h || '00') + ':' + (dur.m || '00')) : '';
+    input.style.width = '100%';
+    input.style.padding = '10px 12px';
+    input.style.border = '2px solid var(--border)';
+    input.style.borderRadius = '8px';
+    input.style.height = '44px';
+    input.setAttribute('data-field-key', key);
+    
+    // Real-time input validation and formatting
+    input.oninput = (e) => {
+      const val = e.target.value;
+      // Allow user to type freely, but validate format in real-time
+      // Expected: HH:MM (5 chars total)
+      if(val.length === 2 && !/^\d{2}$/.test(val)){
+        // Invalid hours
+        input.classList.add('invalid');
+        return;
+      }
+      if(val.length === 3 && val[2] !== ':'){
+        // After 2 digits, must have :
+        input.classList.add('invalid');
+        return;
+      }
+      if(val.length > 5){
+        // Max 5 chars (HH:MM)
+        e.target.value = val.slice(0, 5);
+        return;
+      }
+      // Check if digits in correct positions
+      if(val.length > 0 && !/^\d{0,2}:?\d{0,2}$/.test(val)){
+        input.classList.add('invalid');
+        return;
+      }
+      input.classList.remove('invalid');
+    };
+    
+    input.onchange = (e) => {
+      const raw = loadRowsRaw();
+      const v = String(e.target.value||'').trim();
+      
+      // Empty input is allowed (will be blank)
+      if(!v){
+        raw[colIndex][key] = '';
+        saveRows(raw);
+        renderTransposed();
+        return;
+      }
+      
+      // Validate strict HH:MM format
+      const match = v.match(/^(\d{1,2}):(\d{2})$/);
+      if(!match){
+        input.classList.add('invalid');
+        toast('Error: ' + h + ' must be in HH:MM format (e.g., 02:30)');
+        input.focus();
+        setTimeout(() => input.classList.remove('invalid'), 1500);
+        return;
+      }
+      
+      const hh = Number(match[1]);
+      const mm = Number(match[2]);
+      
+      // Validate ranges
+      if(hh < 0 || hh > 999 || mm < 0 || mm > 59){
+        input.classList.add('invalid');
+        toast('Error: ' + h + ' - hours 0-999, minutes 0-59');
+        input.focus();
+        setTimeout(() => input.classList.remove('invalid'), 1500);
+        return;
+      }
+      
+      // Format and store
+      const formatted = formatDuration(String(hh), String(mm));
+      raw[colIndex][key] = formatted;
+      input.classList.remove('invalid');
+      
+      // Recompute total process time and cost
+      computeTotalProcessTimeForRecord(raw[colIndex]);
+      computeCost(raw[colIndex]);
+      saveRows(raw);
+      renderTransposed();
+    };
+    
+    cell.appendChild(input);
+
+
   } else if (isTime){
-    const timeEl = document.createElement('input'); timeEl.type='time'; timeEl.className='time-visible';
-    const stored = String(rec[key]||"").trim();
-    const as24 = parseFlexibleTimeTo24(stored);
-    if(as24) timeEl.value = as24;
-    timeEl.oninput = (e) => { const v = e.target.value; const d = loadRowsRaw(); d[colIndex][key] = v || ""; saveRows(d); };
-    timeEl.onchange = () => { renderTransposed(); };
-    timeEl.ondblclick = () => { const d = loadRowsRaw(); d[colIndex][key] = ""; saveRows(d); renderTransposed(); };
-    cell.appendChild(timeEl);
+    // 24-hour time input with HH:MM:SS format and picker
+    const timeContainer = document.createElement('div');
+    timeContainer.style.display = 'flex';
+    timeContainer.style.gap = '4px';
+    timeContainer.style.alignItems = 'center';
+    timeContainer.style.width = '100%';
+    
+    // Text display
+    const timeDisplay = document.createElement('input');
+    timeDisplay.type = 'text';
+    timeDisplay.placeholder = 'HH:MM:SS';
+    timeDisplay.value = rec[key] ?? "";
+    timeDisplay.style.flex = '1';
+    timeDisplay.style.padding = '10px 12px';
+    timeDisplay.style.border = '2px solid var(--border)';
+    timeDisplay.style.borderRadius = '8px';
+    timeDisplay.style.fontSize = '0.95rem';
+    timeDisplay.style.backgroundColor = '#fff';
+    timeDisplay.style.color = 'var(--slate)';
+    
+    // Time picker button
+    const pickerBtn = document.createElement('button');
+    pickerBtn.textContent = '🕐';
+    pickerBtn.style.padding = '10px 12px';
+    pickerBtn.style.border = '2px solid var(--border)';
+    pickerBtn.style.borderRadius = '8px';
+    pickerBtn.style.backgroundColor = '#fff';
+    pickerBtn.style.cursor = 'pointer';
+    pickerBtn.style.fontSize = '1rem';
+    
+    // Update handler
+    const updateValue = (val) => {
+      const d = loadRowsRaw();
+      d[colIndex][key] = val;
+      saveRows(d);
+      timeDisplay.value = val;
+    };
+    
+    timeDisplay.onchange = (e) => { updateValue(e.target.value); renderTransposed(); };
+    
+    pickerBtn.onclick = () => {
+      // Create time picker modal
+      const modal = document.createElement('div');
+      modal.style.position = 'fixed';
+      modal.style.top = '50%';
+      modal.style.left = '50%';
+      modal.style.transform = 'translate(-50%, -50%)';
+      modal.style.backgroundColor = '#fff';
+      modal.style.border = '2px solid var(--border)';
+      modal.style.borderRadius = '12px';
+      modal.style.padding = '20px';
+      modal.style.zIndex = '10000';
+      modal.style.boxShadow = '0 10px 40px rgba(0,0,0,0.2)';
+      modal.style.minWidth = '300px';
+      
+      const title = document.createElement('div');
+      title.textContent = 'Select Time (24-hour format)';
+      title.style.fontWeight = '700';
+      title.style.marginBottom = '16px';
+      modal.appendChild(title);
+      
+      const inputsContainer = document.createElement('div');
+      inputsContainer.style.display = 'flex';
+      inputsContainer.style.gap = '8px';
+      inputsContainer.style.marginBottom = '16px';
+      inputsContainer.style.justifyContent = 'center';
+      
+      // Parse current value
+      const currentVal = timeDisplay.value || '00:00:00';
+      const [hh, mm, ss] = currentVal.split(':').map(v => parseInt(v) || 0);
+      
+      // Hour input
+      const hourInput = document.createElement('input');
+      hourInput.type = 'number';
+      hourInput.min = '0';
+      hourInput.max = '23';
+      hourInput.value = String(hh).padStart(2, '0');
+      hourInput.style.width = '60px';
+      hourInput.style.padding = '8px';
+      hourInput.style.border = '2px solid var(--border)';
+      hourInput.style.borderRadius = '8px';
+      hourInput.style.textAlign = 'center';
+      hourInput.style.fontSize = '1rem';
+      
+      // Minute input
+      const minInput = document.createElement('input');
+      minInput.type = 'number';
+      minInput.min = '0';
+      minInput.max = '59';
+      minInput.value = String(mm).padStart(2, '0');
+      minInput.style.width = '60px';
+      minInput.style.padding = '8px';
+      minInput.style.border = '2px solid var(--border)';
+      minInput.style.borderRadius = '8px';
+      minInput.style.textAlign = 'center';
+      minInput.style.fontSize = '1rem';
+      
+      // Second input
+      const secInput = document.createElement('input');
+      secInput.type = 'number';
+      secInput.min = '0';
+      secInput.max = '59';
+      secInput.value = String(ss).padStart(2, '0');
+      secInput.style.width = '60px';
+      secInput.style.padding = '8px';
+      secInput.style.border = '2px solid var(--border)';
+      secInput.style.borderRadius = '8px';
+      secInput.style.textAlign = 'center';
+      secInput.style.fontSize = '1rem';
+      
+      inputsContainer.appendChild(hourInput);
+      const colon1 = document.createElement('span');
+      colon1.textContent = ':';
+      colon1.style.fontSize = '1.2rem';
+      colon1.style.fontWeight = '700';
+      inputsContainer.appendChild(colon1);
+      inputsContainer.appendChild(minInput);
+      const colon2 = document.createElement('span');
+      colon2.textContent = ':';
+      colon2.style.fontSize = '1.2rem';
+      colon2.style.fontWeight = '700';
+      inputsContainer.appendChild(colon2);
+      inputsContainer.appendChild(secInput);
+      
+      modal.appendChild(inputsContainer);
+      
+      // Buttons
+      const buttonsContainer = document.createElement('div');
+      buttonsContainer.style.display = 'flex';
+      buttonsContainer.style.gap = '8px';
+      buttonsContainer.style.justifyContent = 'center';
+      
+      const okBtn = document.createElement('button');
+      okBtn.textContent = 'OK';
+      okBtn.className = 'btn';
+      okBtn.style.padding = '8px 16px';
+      okBtn.onclick = () => {
+        const h = String(parseInt(hourInput.value) || 0).padStart(2, '0');
+        const m = String(parseInt(minInput.value) || 0).padStart(2, '0');
+        const s = String(parseInt(secInput.value) || 0).padStart(2, '0');
+        const timeStr = `${h}:${m}:${s}`;
+        updateValue(timeStr);
+        document.body.removeChild(modal);
+        document.body.removeChild(overlay);
+        renderTransposed();
+      };
+      
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.className = 'btn ghost';
+      cancelBtn.style.padding = '8px 16px';
+      cancelBtn.onclick = () => {
+        document.body.removeChild(modal);
+        document.body.removeChild(overlay);
+      };
+      
+      buttonsContainer.appendChild(okBtn);
+      buttonsContainer.appendChild(cancelBtn);
+      modal.appendChild(buttonsContainer);
+      
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.top = '0';
+      overlay.style.left = '0';
+      overlay.style.right = '0';
+      overlay.style.bottom = '0';
+      overlay.style.backgroundColor = 'rgba(0,0,0,0.3)';
+      overlay.style.zIndex = '9999';
+      overlay.onclick = () => {
+        document.body.removeChild(modal);
+        document.body.removeChild(overlay);
+      };
+      
+      document.body.appendChild(overlay);
+      document.body.appendChild(modal);
+      hourInput.focus();
+    };
+    
+    timeContainer.appendChild(timeDisplay);
+    timeContainer.appendChild(pickerBtn);
+    cell.appendChild(timeContainer);
 
   } else {
-    const numericHeads = ["total","qty","input","output","water","f-1","f-2","residue","drain","packing","cost","sr. no","main recovery","composite yield"];
-    const isNumeric = numericHeads.some(nh => lower.includes(nh));
-    const input = document.createElement('input'); input.type = isNumeric ? 'number' : 'text'; input.value = rec[key] ?? "";
-    input.onchange = (e) => { const d = loadRowsRaw(); let v = e.target.value; if(input.type==='number'){ const n=parseFloat(String(v).replace(/,/g,'')); v = isNaN(n)?v:n } d[colIndex][key]=v; saveRows(d); renderTransposed(); };
+    const numericHeads = ["total","qty","input","Output","water","f-1","f-2","residue","drain","cost","sr. no","main recovery","composite yield"];
+    // treat Total Process Time as text (HH:MM) even though it contains 'total'
+    const isNumeric = numericHeads.some(nh => lower.includes(nh)) && !lower.includes('process time');
+    // Check if this field requires numeric-only validation
+    const requiresNumericOnly = NUMERIC_ONLY_FIELDS.some(nf => lower.includes(nf));
+    
+    const input = document.createElement('input'); 
+    input.type = isNumeric ? 'number' : 'text'; 
+    input.value = rec[key] ?? "";
+    
+    input.onchange = (e) => { 
+      const d = loadRowsRaw(); 
+      let v = String(e.target.value || '').trim();
+      
+      // Validate numeric-only fields
+      if(requiresNumericOnly && v !== ''){
+        if(!/^-?\d+(\.\d+)?$/.test(v)){
+          // Invalid: show error and clear
+          input.classList.add('invalid');
+          toast('Error: ' + h + ' must be numeric only');
+          setTimeout(() => input.classList.remove('invalid'), 1500);
+          return;
+        }
+      }
+      
+      if(input.type==='number'){ 
+        const n=parseFloat(String(v).replace(/,/g,'')); 
+        v = isNaN(n)?v:n; 
+      } 
+      d[colIndex][key]=v; 
+      saveRows(d);
+      
+      // Trigger calculations if this field is used in formulas
+      const isUsedInFormulas = 
+        lower.includes('total input') || 
+        lower.includes('output') || 
+        lower.includes('water') || 
+        lower.includes('f-1') || 
+        lower.includes('f-2') || 
+        lower.includes('residue') || 
+        lower.includes('drain');
+      if(isUsedInFormulas){
+        computeMainRecoveryPercent(d[colIndex]);
+        computeCompositeYield(d[colIndex]);
+        saveRows(d);
+      }
+      
+      renderTransposed(); 
+    };
     cell.appendChild(input);
   }
 
@@ -605,13 +1575,6 @@ function renderTransposed(){
   if(data.length===0){
     const p = document.createElement('div'); p.style.padding='16px'; p.textContent='No records. Click Add Record.'; area.appendChild(p);
   }
-  // make editor visible: show global save/clear buttons
-  try{
-    const sb = document.getElementById('saveBtn'); const cb = document.getElementById('clearAllFieldsBtn');
-    if(sb) sb.style.display = 'inline-block';
-    if(cb) cb.style.display = 'inline-block';
-  }catch(e){}
-  window.__LAST_RENDER_MODE = 'editor';
 }
 
 /* parse date dd-mm-yyyy or dd/mm/yyyy to yyyy-mm-dd */
@@ -627,7 +1590,9 @@ function parseToISODate(v){
 /* Add column (always allowed) and focus first input in new column */
 function addColumn(data){
   const rows = loadRowsRaw();
-  rows.push(data || { __simple: true, quick_text: '' });
+  // Create a proper full record, not a __simple record
+  const newRecord = data || defaultRecord();
+  rows.push(newRecord);
   saveRows(rows);
   renderTransposed();
   // after render, focus first non-hidden input of last column
@@ -686,8 +1651,8 @@ document.getElementById('importXlsx').addEventListener('change', async (ev) => {
         if(!mappedKey) mappedKey = String(h||"").toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
         const lower = String(h||"").toLowerCase();
         // Normalize imported time-like values into canonical 24-hour HH:MM when possible
-        if((/\btime\b/.test(lower) || lower.includes('start time') || lower.includes('stop time') || lower.includes('heating start time') || lower.includes('heating stop time')) && typeof val === 'string'){
-          const as24 = parseFlexibleTimeTo24(String(val).trim());
+        if((/\btime\b/.test(lower) || lower.includes('start time') || lower.includes('stop time') || lower.includes('heating start time') || lower.includes('Heating stop time')) && typeof val === 'string'){
+          const as24 = parseTime24(String(val).trim());
           obj[mappedKey] = as24 || val;
         } else if(/\bdate\b/.test(lower) && typeof val === 'string'){
           const iso = parseToISODate(val); obj[mappedKey]= iso||val;
@@ -743,38 +1708,63 @@ document.getElementById('exportBtn').addEventListener('click', async ()=> {
 document.getElementById('addColBtn').addEventListener('click', ()=> addColumn());
 document.getElementById('clearAllFieldsBtn').addEventListener('click', ()=> { /* user requested immediate clear */ clearFields(); });
 document.getElementById('saveBtn').addEventListener('click', async ()=> {
-  // Save ALL global behavior: validate all rows then write them as a single batch
-  const rows = loadRowsRaw();
-  const { ok, invalid } = validateAllRows();
-  if(!ok){ markInvalidColumns(invalid); alert('Please fill all records before saving.'); return; }
+  console.log('===== SAVE BUTTON CLICKED =====');
+  
+  // Validate all records have all fields filled
+  clearValidationIndicators();
+  if(!validateAllRecordsComplete()){
+    toast('⚠️ All fields are required. Please fill in all fields (shown in red).', 3000);
+    return;
+  }
+  
+  logFieldMappings(); // Debug: show all field mappings
+  
+  // Save ALL global behavior: use sanitized rows so legacy records are normalized
+  const rows = loadData();
+  console.log('Raw rows loaded:', rows.length);
+  console.log('Raw rows:', rows);
+  
+  // DEBUG: Check each row
+  rows.forEach((r, idx) => {
+    console.log(`Row ${idx} keys:`, Object.keys(r));
+    console.log(`Row ${idx} data:`, r);
+  });
 
   // prepare payload (remove internal marker keys) - pass records directly
   const payload = rows.map(r => {
-    if(r && r.__simple) return { quick_text: r.quick_text };
     const o = {};
     Object.keys(r||{}).forEach(k=>{ if(!String(k).startsWith('__')) o[k]=r[k]; });
     return o;
   });
+  console.log('Payload prepared:', payload.length);
+  console.log('Payload:', payload);
 
   if(!db){
     // fallback local: keep backup and clear inputs
+    console.log('Firestore not available, saving locally');
     try{ const existing = JSON.parse(localStorage.getItem(LOCAL_SAVE_BACKUP_KEY) || '[]'); const updated = existing.concat(payload); localStorage.setItem(LOCAL_SAVE_BACKUP_KEY, JSON.stringify(updated)); }catch(e){ console.warn('backup save failed', e); }
     clearAllFields(); toast('Saved locally (Firestore not available) — fields cleared'); return;
   }
 
+  console.log('Attempting Firestore save...');
   try{
     const res = await saveToFirestore(payload);
+    console.log('Save response:', res);
     // normalized response could be {saved: n} or an array
     const savedCount = (res && res.saved) ? res.saved : (Array.isArray(res)?res.length:0);
+    console.log('Saved count:', savedCount);
     if(savedCount>0){
       clearAllFields(); toast('Data saved successfully!');
       const s = document.getElementById('fbStatus'); if(s) s.textContent = 'DB: saved ' + savedCount + ' rows';
     } else {
+      console.warn('saveToFirestore returned 0 saved records');
       toast('No rows were saved to DB');
     }
     // don't switch to DB table automatically; stay in editor with cleared fields
   }catch(err){
-    console.error(err);
+    console.error('Error during save:', err);
+    console.error('Error code:', err.code);
+    console.error('Error message:', err.message);
     const msg = String(err && (err.code || err.message || err)).toLowerCase();
     if(msg.includes('permission') || msg.includes('not authenticated') || msg.includes('auth')){
       try{ const existing = JSON.parse(localStorage.getItem(LOCAL_SAVE_BACKUP_KEY) || '[]'); const updated = existing.concat(payload); localStorage.setItem(LOCAL_SAVE_BACKUP_KEY, JSON.stringify(updated)); }catch(e){ console.warn('backup save failed', e); }
@@ -801,12 +1791,12 @@ document.getElementById('loadBtn').addEventListener('click', async ()=> {
 });
 
 /* toast */
-function toast(msg){
+function toast(msg, duration=1400){
   const el = document.createElement('div'); el.textContent = msg;
   el.style.position='fixed'; el.style.right='16px'; el.style.bottom='16px';
   el.style.background='var(--success)'; el.style.color='white'; el.style.padding='10px 14px';
-  el.style.borderRadius='10px'; el.style.boxShadow='0 6px 18px rgba(0,0,0,0.12)'; document.body.appendChild(el);
-  setTimeout(()=> el.remove(), 1400);
+  el.style.borderRadius='10px'; el.style.boxShadow='0 6px 18px rgba(0,0,0,0.12)'; el.style.zIndex='10000'; document.body.appendChild(el);
+  setTimeout(()=> el.remove(), duration);
 }
 
 /* init */
