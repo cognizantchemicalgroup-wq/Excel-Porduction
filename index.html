@@ -60,6 +60,11 @@
     .fields-col{ min-width:320px; border-right:1px solid var(--border-light); background:linear-gradient(180deg,#fbfdff,#f7fbff); display:flex; flex-direction:column; }
     .columns-toolbar{ padding:12px 16px; border-bottom:1px solid var(--border-light); background:transparent; font-weight:800; color:var(--blue-dark) }
     .field-label { padding:10px 16px; border-bottom:1px solid var(--border-light); font-weight:700; color:var(--blue-dark); min-height:64px; display:flex; align-items:center }
+    /* info icon beside certain field labels */
+    .field-label .info-icon { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; margin-left:8px; border-radius:50%; background:var(--blue-light); color:#fff; font-size:12px; cursor:default; position:relative }
+    .field-label .info-icon:hover { background:var(--blue-dark); }
+    .field-label .info-tooltip { display:none; position:absolute; top:28px; left:50%; transform:translateX(-50%); background:#111827; color:#fff; padding:8px 10px; border-radius:6px; font-size:12px; white-space:nowrap; max-width:580px; text-align:left; box-shadow:0 6px 28px rgba(0,0,0,0.16); z-index:6000 }
+    .field-label .info-icon:hover .info-tooltip { display:block; }
 
     /* record columns */
     .record-col { min-width:260px; border-right:1px solid var(--border-light); background:#fff; display:flex; flex-direction:column; }
@@ -110,14 +115,54 @@
         gap: 6px;
     }
 
-    /* label shown above the input inside each cell */
+    /* label shown above the input inside each cell — with info icon support */
     .cell .cell-label {
-        display: block;
+        display: flex;
+        align-items: center;
+        gap: 6px;
         font-weight: 700;
         color: var(--blue-dark);
         font-size: 0.95rem;
         line-height: 1.1;
+        flex-wrap: wrap;
     }
+
+    /* info icon on mobile */
+    .cell .cell-label .info-icon { 
+        display: inline-flex; 
+        align-items: center; 
+        justify-content: center; 
+        width: 20px; 
+        height: 20px; 
+        border-radius: 50%; 
+        background: var(--blue-light); 
+        color: #fff; 
+        font-size: 11px; 
+        cursor: default; 
+        position: relative;
+        flex-shrink: 0;
+        margin-left: 4px;
+    }
+    .cell .cell-label .info-icon:hover { background: var(--blue-dark); }
+    .cell .cell-label .info-tooltip { 
+        display: none; 
+        position: absolute; 
+        top: 26px; 
+        left: 0; 
+        transform: none; 
+        max-width: 280px;
+        background: #111827; 
+        color: #fff; 
+        padding: 8px 10px; 
+        border-radius: 6px; 
+        font-size: 11px; 
+        white-space: normal; 
+        text-align: left;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.16); 
+        z-index: 2000;
+    }
+    .cell .cell-label .info-icon:hover .info-tooltip { display: block; }
+
 
     /* make header align left and a bit smaller on mobile */
     .record-header { text-align: left; font-size: 0.98rem; padding: 10px 12px; }
@@ -321,6 +366,7 @@ function validateAllRows(){
   const rows = loadRowsRaw(); const invalid = [];
   const calculatedFieldKeys = [
     headerToKey['Total Process Time'],
+    headerToKey['Total heating hours'],
     headerToKey['Cost'],
     headerToKey['Main Recovery%'],
     headerToKey['Composite yield %']
@@ -767,35 +813,156 @@ function parseTime24(v){
   return "";
 }
 
-// Compute Total Process Time for a record by summing duration fields (HH:MM)
-// Returns empty string if no duration fields are filled
-function computeTotalProcessTimeForRecord(rec){
+// Compute Total heating hours = Heating stop time - Heating start time
+// Returns difference in HH:MM format
+function computeTotalHeatingHours(rec){
   if(!rec) return '';
-  let totalMins = 0;
-  let hasAnyDuration = false;
-  DURATION_FIELDS.forEach(df => {
-    const k = String(df).toLowerCase().replace(/\s+/g,'_').replace(/[^\w_]/g,'');
-    const val = String(rec[k] || '').trim();
-    if(!val) return;
-    hasAnyDuration = true;
-    const p = parseDurationString(val);
-    const hh = Number(p.h || 0);
-    const mm = Number(p.m || 0);
-    if(!isNaN(hh) && !isNaN(mm)) totalMins += (hh*60 + mm);
-  });
-  // If no duration fields filled, return empty and clear the stored value
-  if(!hasAnyDuration){
-    const totalKey = headerToKey['Total Process Time'];
-    if(totalKey) rec[totalKey] = '';
-    return '';
+  const heatingStartKey = headerToKey['Heating start time'];
+  const heatingStopKey = headerToKey['Heating stop time'];
+  const totalHeatingHoursKey = headerToKey['Total heating hours'];
+  
+  if(!heatingStartKey || !heatingStopKey || !totalHeatingHoursKey) return '';
+  
+  const startStr = String(rec[heatingStartKey] || '').trim();
+  const stopStr = String(rec[heatingStopKey] || '').trim();
+  
+  if(!startStr || !stopStr) { rec[totalHeatingHoursKey] = ''; return ''; }
+  
+  // Flexible parsing: support
+  // - dd-mm-yyyy HH:MM:SS (or HH:MM)
+  // - YYYY-MM-DDTHH:MM(:SS)
+  // - HH:MM(:SS) (time-only)
+  function parseFlexible(dtStr){
+    if(!dtStr) return null;
+    const s = String(dtStr).trim();
+    // dd-mm-yyyy HH:MM:SS or dd-mm-yyyy HH:MM
+    let m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if(m){
+      const dd = Number(m[1]); const mm = Number(m[2]); const yyyy = Number(m[3]);
+      const hh = Number(m[4]||0); const min = Number(m[5]||0); const ss = Number(m[6]||0);
+      return new Date(yyyy, mm-1, dd, hh, min, ss);
+    }
+    // ISO-like YYYY-MM-DDTHH:MM(:SS) or space separated
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if(m){
+      const yyyy = Number(m[1]); const mm = Number(m[2]); const dd = Number(m[3]);
+      const hh = Number(m[4]||0); const min = Number(m[5]||0); const ss = Number(m[6]||0);
+      return new Date(yyyy, mm-1, dd, hh, min, ss);
+    }
+    // Time-only HH:MM(:SS)
+    m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if(m){
+      const hh = Number(m[1]); const min = Number(m[2]); const ss = Number(m[3]||0);
+      // Use today's date as base for time-only values
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, min, ss);
+    }
+    return null;
   }
-  const th = Math.floor(totalMins / 60);
-  const tm = totalMins % 60;
-  const out = String(th).padStart(2,'0') + ':' + String(tm).padStart(2,'0');
-  const totalKey = headerToKey['Total Process Time'];
-  if(totalKey) rec[totalKey] = out;
+
+  const hasDateRegex = /(\d{1,2}-\d{1,2}-\d{4})|(\d{4}-\d{2}-\d{2})/;
+  const startHasDate = hasDateRegex.test(startStr);
+  const stopHasDate = hasDateRegex.test(stopStr);
+
+  // Parse into Date objects
+  let startDt = parseFlexible(startStr);
+  let stopDt = parseFlexible(stopStr);
+  if(!startDt || !stopDt){ rec[totalHeatingHoursKey] = ''; return ''; }
+
+  // If one side had only time and the other had a date, align the time-only to the date-containing side
+  if(startHasDate && !stopHasDate){
+    // take time from stopDt and date from startDt
+    stopDt = new Date(startDt.getFullYear(), startDt.getMonth(), startDt.getDate(), stopDt.getHours(), stopDt.getMinutes(), stopDt.getSeconds());
+    if(stopDt < startDt) stopDt.setDate(stopDt.getDate() + 1);
+  } else if(!startHasDate && stopHasDate){
+    startDt = new Date(stopDt.getFullYear(), stopDt.getMonth(), stopDt.getDate(), startDt.getHours(), startDt.getMinutes(), startDt.getSeconds());
+    // if start is after stop, assume start was previous day
+    if(startDt > stopDt) startDt.setDate(startDt.getDate() - 1);
+  } else if(!startHasDate && !stopHasDate){
+    // both time-only: if stop earlier than start, assume next day
+    if(stopDt < startDt) stopDt.setDate(stopDt.getDate() + 1);
+  }
+
+  // If both had explicit dates and stop is before start, treat as invalid
+  if(startHasDate && stopHasDate && stopDt < startDt){ rec[totalHeatingHoursKey] = ''; return ''; }
+
+  const diffMs = stopDt.getTime() - startDt.getTime();
+  if(isNaN(diffMs) || diffMs < 0){ rec[totalHeatingHoursKey] = ''; return ''; }
+  const diffMins = Math.round(diffMs / 60000);
+  const hh = Math.floor(diffMins / 60);
+  const mm = diffMins % 60;
+  const out = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+  rec[totalHeatingHoursKey] = out;
   return out;
 }
+
+// Compute Total Process Time = Batch Stop Date/Time - Batch Start Date/Time
+// Uses date + time combination to handle multi-day processes
+function computeTotalProcessTimeForRecord(rec){
+  if(!rec) return '';
+  const batchStartDateKey = headerToKey['Batch start date'];
+  const batchStartTimeKey = headerToKey['Start time'];
+  const batchStopDateKey = headerToKey['Batch Stop Date'];
+  const batchStopTimeKey = headerToKey['Batch stop time'];
+  const totalProcessTimeKey = headerToKey['Total Process Time'];
+  
+  if(!batchStartDateKey || !batchStartTimeKey || !batchStopDateKey || !batchStopTimeKey || !totalProcessTimeKey) return '';
+  
+  const startDateStr = String(rec[batchStartDateKey] || '').trim();
+  const startTimeStr = String(rec[batchStartTimeKey] || '').trim();
+  const stopDateStr = String(rec[batchStopDateKey] || '').trim();
+  const stopTimeStr = String(rec[batchStopTimeKey] || '').trim();
+  
+  if(!startDateStr || !startTimeStr || !stopDateStr || !stopTimeStr) { rec[totalProcessTimeKey] = ''; return ''; }
+  
+  // Combine date + time strings into unified datetime
+  const startDtStr = startDateStr + ' ' + startTimeStr;
+  const stopDtStr = stopDateStr + ' ' + stopTimeStr;
+  
+  // Flexible parsing for combined datetime strings
+  function parseFlexibleDt(dtStr){
+    if(!dtStr) return null;
+    const s = String(dtStr).trim();
+    // dd-mm-yyyy hh:mm:ss or dd-mm-yyyy HH:MM:SS or YYYY-MM-DD HH:MM:SS
+    let m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if(m){
+      const dd = Number(m[1]); const mm = Number(m[2]); const yyyy = Number(m[3]);
+      const hh = Number(m[4]||0); const min = Number(m[5]||0); const ss = Number(m[6]||0);
+      return new Date(yyyy, mm-1, dd, hh, min, ss);
+    }
+    // ISO-like YYYY-MM-DD HH:MM(:SS)
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if(m){
+      const yyyy = Number(m[1]); const mm = Number(m[2]); const dd = Number(m[3]);
+      const hh = Number(m[4]||0); const min = Number(m[5]||0); const ss = Number(m[6]||0);
+      return new Date(yyyy, mm-1, dd, hh, min, ss);
+    }
+    return null;
+  }
+  
+  let startDt = parseFlexibleDt(startDtStr);
+  let stopDt = parseFlexibleDt(stopDtStr);
+  
+  if(!startDt || !stopDt){ rec[totalProcessTimeKey] = ''; return ''; }
+  
+  // If stop is before start, treat as invalid
+  if(stopDt < startDt){ rec[totalProcessTimeKey] = ''; return ''; }
+  
+  const diffMs = stopDt.getTime() - startDt.getTime();
+  if(isNaN(diffMs) || diffMs < 0){ rec[totalProcessTimeKey] = ''; return ''; }
+  
+  const diffMins = Math.round(diffMs / 60000);
+  const hh = Math.floor(diffMins / 60);
+  const mm = diffMins % 60;
+  const out = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+  
+  rec[totalProcessTimeKey] = out;
+  return out;
+}
+
+// Old: Compute Total Process Time for a record by summing duration fields (HH:MM)
+// Returns empty string if no duration fields are filled
+// function computeTotalProcessTimeForRecordOld(rec){
 
 // Compute Main Recovery % = (Total Input / Output) * 100
 function computeMainRecoveryPercent(rec){
@@ -880,6 +1047,11 @@ function computeTotalsForAllRecords(){
     const afterTime = computeTotalProcessTimeForRecord(rec);
     if(beforeTime !== afterTime) changed = true;
     
+    // Total Heating Hours
+    const beforeHeatingHours = String(rec[ headerToKey['Total heating hours'] ] || '');
+    const afterHeatingHours = computeTotalHeatingHours(rec);
+    if(beforeHeatingHours !== afterHeatingHours) changed = true;
+    
     // Main Recovery %
     const beforeMainRecovery = String(rec[ headerToKey['Main Recovery%'] ] || '');
     const afterMainRecovery = computeMainRecoveryPercent(rec);
@@ -910,7 +1082,70 @@ function renderTransposed(){
   const fieldsCol = document.createElement('div'); fieldsCol.className='fields-col';
   const toolbar = document.createElement('div'); toolbar.className='columns-toolbar'; toolbar.textContent='Fields';
   fieldsCol.appendChild(toolbar);
-  HEADERS.forEach(h => { const d = document.createElement('div'); d.className='field-label'; d.textContent=h; fieldsCol.appendChild(d); });
+  // helper: convert 0=>A, 1=>B ... 25=>Z, 26=>AA etc.
+  function indexToColLetter(i){
+    let s = '';
+    let n = i + 1; // 1-based
+    while(n>0){
+      const rem = (n-1) % 26;
+      s = String.fromCharCode(65 + rem) + s;
+      n = Math.floor((n-1)/26);
+    }
+    return s;
+  }
+
+  HEADERS.forEach((h, idx) => {
+    const d = document.createElement('div'); d.className='field-label';
+    const letter = indexToColLetter(idx);
+    // create text node
+    const txt = document.createElement('div'); txt.style.flex = '1'; txt.textContent = `${h} (${letter})`;
+    d.appendChild(txt);
+
+    // add info icons for calculated fields
+    const lower = String(h||'').toLowerCase();
+
+    // Total Process Time tooltip (detailed field names)
+    if(lower.includes('total process time')){
+      const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
+      const tip = document.createElement('span'); tip.className = 'info-tooltip';
+      tip.innerHTML = 'Total Process Time = Heating start time + Total reflux time + Total fraction cut collection time + <br>Total feeding time + Total Main collection time';
+      icon.appendChild(tip); d.appendChild(icon);
+    }
+
+    // Total Heating Hours tooltip
+    if(lower.includes('total heating hours')){
+      const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
+      const tip = document.createElement('span'); tip.className = 'info-tooltip';
+      tip.innerHTML = 'Total heating hours = Heating stop time - Heating start time';
+      icon.appendChild(tip); d.appendChild(icon);
+    }
+
+    // Main Recovery% tooltip
+    if(lower.includes('main recovery')){
+      const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
+      const tip = document.createElement('span'); tip.className = 'info-tooltip';
+      tip.textContent = 'Main Recovery% = (Total Input / Output) * 100';
+      icon.appendChild(tip); d.appendChild(icon);
+    }
+
+    // Composite yield % tooltip
+    if(lower.includes('composite yield')){
+      const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
+      const tip = document.createElement('span'); tip.className = 'info-tooltip';
+      tip.textContent = 'Composite yield % = (F-1 + F-2 + Residue + Drain qty while sampling + Output + Water) / Total Input';
+      icon.appendChild(tip); d.appendChild(icon);
+    }
+
+    // Cost tooltip
+    if(lower.includes('cost')){
+      const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
+      const tip = document.createElement('span'); tip.className = 'info-tooltip';
+      tip.textContent = 'Cost = Total Process Time (hours) * 4000';
+      icon.appendChild(tip); d.appendChild(icon);
+    }
+
+    fieldsCol.appendChild(d);
+  });
   area.appendChild(fieldsCol);
 
   // columns
@@ -930,10 +1165,12 @@ function renderTransposed(){
   const lower = h.toLowerCase();
   const isDuration = DURATION_FIELDS.some(df => lower.includes(df));
   const isHeatingStopDateTime = lower.includes('heating stop time');
+  const isHeatingStartDateTime = lower.includes('heating start time');
   const isBatchStopTime = lower.includes('batch stop time') || lower.includes('batch stop');
   const isDate = lower.includes('date') && !isHeatingStopDateTime; // keep date fields, but heating stop is datetime-local
-  const isTime = !isDuration && (/\btime\b/.test(lower) || lower.includes('start time') || lower.includes('stop time') || lower.includes('heating start time') || lower.includes('heating stop time'));
-  const isCalculated = lower.includes('main recovery') || lower.includes('composite yield') || lower.includes('total process time') || lower.includes('cost');
+  // Treat generic time fields as time, but exclude heating start/stop which use combined datetime pickers
+  const isTime = !isDuration && (/\btime\b/.test(lower) || lower.includes('start time') || lower.includes('stop time') || lower.includes('heating stop time'));
+  const isCalculated = lower.includes('main recovery') || lower.includes('composite yield') || lower.includes('total process time') || lower.includes('total heating hours') || lower.includes('cost');
 
 
   // show inline label on small screens (we hide the left field-col via CSS)
@@ -941,7 +1178,40 @@ function renderTransposed(){
   if(isSmall){
     const lab = document.createElement('div');
     lab.className = 'cell-label';
-    lab.textContent = h;
+    
+    // add field name text
+    const labelText = document.createElement('span');
+    labelText.textContent = h;
+    lab.appendChild(labelText);
+    
+    // add info icon for calculated fields on mobile too
+    if(lower.includes('total process time')){
+      const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
+      const tip = document.createElement('span'); tip.className = 'info-tooltip';
+      tip.innerHTML = 'Total Process Time =<br>Heating start time + Total reflux time + Total fraction cut collection time + Total feeding time + Total Main collection time';
+      icon.appendChild(tip); lab.appendChild(icon);
+    } else if(lower.includes('total heating hours')){
+      const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
+      const tip = document.createElement('span'); tip.className = 'info-tooltip';
+      tip.innerHTML = 'Total heating hours = Heating stop time - Heating start time (HH:MM)';
+      icon.appendChild(tip); lab.appendChild(icon);
+    } else if(lower.includes('main recovery')){
+      const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
+      const tip = document.createElement('span'); tip.className = 'info-tooltip';
+      tip.textContent = 'Main Recovery% = (Total Input / Output) * 100';
+      icon.appendChild(tip); lab.appendChild(icon);
+    } else if(lower.includes('composite yield')){
+      const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
+      const tip = document.createElement('span'); tip.className = 'info-tooltip';
+      tip.textContent = 'Composite yield % = (F-1 + F-2 + Residue + Drain qty while sampling + Output + Water) / Total Input';
+      icon.appendChild(tip); lab.appendChild(icon);
+    } else if(lower.includes('cost')){
+      const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
+      const tip = document.createElement('span'); tip.className = 'info-tooltip';
+      tip.textContent = 'Cost = Total Process Time (hours) * 4000';
+      icon.appendChild(tip); lab.appendChild(icon);
+    }
+    
     cell.appendChild(lab);
   }
 
@@ -1227,6 +1497,226 @@ function renderTransposed(){
     container.appendChild(display);
     container.appendChild(pickerBtn);
     cell.appendChild(container);
+
+  } else if (isHeatingStartDateTime){
+    // Heating start: same combined date+time picker as Heating stop
+    const container2 = document.createElement('div');
+    container2.style.display = 'flex';
+    container2.style.gap = '4px';
+    container2.style.alignItems = 'center';
+    container2.style.width = '100%';
+    
+    const display2 = document.createElement('input');
+    display2.type = 'text';
+    display2.placeholder = 'dd-mm-yyyy hh:mm:ss';
+    display2.value = rec[key] ?? "";
+    display2.style.flex = '1';
+    display2.style.padding = '10px 12px';
+    display2.style.border = '2px solid var(--border)';
+    display2.style.borderRadius = '8px';
+    display2.style.fontSize = '0.95rem';
+    display2.style.backgroundColor = '#fff';
+    display2.style.color = 'var(--slate)';
+    display2.style.maxWidth = '260px';
+    
+    const pickerBtn2 = document.createElement('button');
+    pickerBtn2.textContent = '📅';
+    pickerBtn2.style.padding = '10px 12px';
+    pickerBtn2.style.border = '2px solid var(--border)';
+    pickerBtn2.style.borderRadius = '8px';
+    pickerBtn2.style.backgroundColor = '#fff';
+    pickerBtn2.style.cursor = 'pointer';
+    pickerBtn2.style.fontSize = '1rem';
+    
+    const updateValue2 = (val) => {
+      const d = loadRowsRaw();
+      d[colIndex][key] = val;
+      saveRows(d);
+      display2.value = val;
+    };
+    
+    display2.onchange = (e) => { updateValue2(e.target.value); renderTransposed(); };
+    
+    pickerBtn2.onclick = () => {
+      const modal = document.createElement('div');
+      modal.style.position = 'fixed';
+      modal.style.top = '50%';
+      modal.style.left = '50%';
+      modal.style.transform = 'translate(-50%, -50%)';
+      modal.style.backgroundColor = '#fff';
+      modal.style.border = '2px solid var(--border)';
+      modal.style.borderRadius = '12px';
+      modal.style.padding = '20px';
+      modal.style.zIndex = '10000';
+      modal.style.boxShadow = '0 10px 40px rgba(0,0,0,0.2)';
+      modal.style.minWidth = '320px';
+      
+      const title = document.createElement('div');
+      title.textContent = 'Select Date & Time (dd-mm-yyyy hh:mm:ss)';
+      title.style.fontWeight = '700';
+      title.style.marginBottom = '16px';
+      modal.appendChild(title);
+      
+      // Parse current value
+      const current = display2.value || '';
+      const [datePart, timePart] = current.split(' ');
+      const [dd, mm, yyyy] = datePart ? datePart.split('-') : ['01', '01', '2025'];
+      const [hh, min, ss] = timePart ? timePart.split(':') : ['00', '00', '00'];
+      
+      // Date inputs
+      const dateLabel = document.createElement('div');
+      dateLabel.textContent = 'Date (dd-mm-yyyy):';
+      dateLabel.style.fontWeight = '600';
+      dateLabel.style.marginBottom = '8px';
+      dateLabel.style.fontSize = '0.9rem';
+      modal.appendChild(dateLabel);
+      
+      const dateContainer = document.createElement('div');
+      dateContainer.style.display = 'flex';
+      dateContainer.style.gap = '8px';
+      dateContainer.style.marginBottom = '16px';
+      dateContainer.style.justifyContent = 'center';
+      
+      const dayInput = document.createElement('input');
+      dayInput.type = 'number';
+      dayInput.min = '1';
+      dayInput.max = '31';
+      dayInput.value = dd || '01';
+      dayInput.style.width = '60px';
+      dayInput.style.padding = '8px';
+      dayInput.style.border = '2px solid var(--border)';
+      dayInput.style.borderRadius = '8px';
+      dayInput.style.textAlign = 'center';
+      
+      const monthInput = document.createElement('input');
+      monthInput.type = 'number';
+      monthInput.min = '1';
+      monthInput.max = '12';
+      monthInput.value = mm || '01';
+      monthInput.style.width = '60px';
+      monthInput.style.padding = '8px';
+      monthInput.style.border = '2px solid var(--border)';
+      monthInput.style.borderRadius = '8px';
+      monthInput.style.textAlign = 'center';
+      
+      const yearInput = document.createElement('input');
+      yearInput.type = 'number';
+      yearInput.min = '1900';
+      yearInput.max = '2100';
+      yearInput.value = yyyy || '2025';
+      yearInput.style.width = '80px';
+      yearInput.style.padding = '8px';
+      yearInput.style.border = '2px solid var(--border)';
+      yearInput.style.borderRadius = '8px';
+      yearInput.style.textAlign = 'center';
+      
+      // Time inputs
+      const timeLabel = document.createElement('div');
+      timeLabel.textContent = 'Time (HH:MM:SS):';
+      timeLabel.style.fontWeight = '600';
+      timeLabel.style.marginBottom = '8px';
+      timeLabel.style.fontSize = '0.9rem';
+      modal.appendChild(timeLabel);
+      
+      const timeContainer = document.createElement('div');
+      timeContainer.style.display = 'flex';
+      timeContainer.style.gap = '8px';
+      timeContainer.style.marginBottom = '16px';
+      timeContainer.style.justifyContent = 'center';
+      
+      const hourInput = document.createElement('input');
+      hourInput.type = 'number';
+      hourInput.min = '0';
+      hourInput.max = '23';
+      hourInput.value = hh || '00';
+      hourInput.style.width = '60px';
+      hourInput.style.padding = '8px';
+      hourInput.style.border = '2px solid var(--border)';
+      hourInput.style.borderRadius = '8px';
+      hourInput.style.textAlign = 'center';
+      
+      const minInput = document.createElement('input');
+      minInput.type = 'number';
+      minInput.min = '0';
+      minInput.max = '59';
+      minInput.value = min || '00';
+      minInput.style.width = '60px';
+      minInput.style.padding = '8px';
+      minInput.style.border = '2px solid var(--border)';
+      minInput.style.borderRadius = '8px';
+      minInput.style.textAlign = 'center';
+      
+      const secInput = document.createElement('input');
+      secInput.type = 'number';
+      secInput.min = '0';
+      secInput.max = '59';
+      secInput.value = ss || '00';
+      secInput.style.width = '60px';
+      secInput.style.padding = '8px';
+      secInput.style.border = '2px solid var(--border)';
+      secInput.style.borderRadius = '8px';
+      secInput.style.textAlign = 'center';
+      
+      dateContainer.appendChild(dayInput);
+      dateContainer.appendChild(monthInput);
+      dateContainer.appendChild(yearInput);
+      modal.appendChild(dateContainer);
+      
+      timeContainer.appendChild(hourInput);
+      const colon1 = document.createElement('span'); colon1.textContent = ':'; colon1.style.fontSize='1.2rem'; colon1.style.fontWeight='700';
+      timeContainer.appendChild(colon1);
+      timeContainer.appendChild(minInput);
+      const colon2 = document.createElement('span'); colon2.textContent = ':'; colon2.style.fontSize='1.2rem'; colon2.style.fontWeight='700';
+      timeContainer.appendChild(colon2);
+      timeContainer.appendChild(secInput);
+      modal.appendChild(timeContainer);
+      
+      const buttonsContainer = document.createElement('div');
+      buttonsContainer.style.display = 'flex';
+      buttonsContainer.style.gap = '8px';
+      buttonsContainer.style.justifyContent = 'center';
+      
+      const okBtn = document.createElement('button'); okBtn.textContent = 'OK'; okBtn.style.padding='8px 12px'; okBtn.style.borderRadius='8px'; okBtn.style.cursor='pointer';
+      const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancel'; cancelBtn.style.padding='8px 12px'; cancelBtn.style.borderRadius='8px'; cancelBtn.style.cursor='pointer';
+      
+      okBtn.onclick = () => {
+        // Format selected values to dd-mm-yyyy hh:mm:ss
+        const dval = String(Number(dayInput.value||0)).padStart(2,'0');
+        const mval = String(Number(monthInput.value||0)).padStart(2,'0');
+        const yval = String(Number(yearInput.value||0)).padStart(4,'0');
+        const hval = String(Number(hourInput.value||0)).padStart(2,'0');
+        const minv = String(Number(minInput.value||0)).padStart(2,'0');
+        const sval = String(Number(secInput.value||0)).padStart(2,'0');
+        const out = `${dval}-${mval}-${yval} ${hval}:${minv}:${sval}`;
+        updateValue2(out);
+        document.body.removeChild(modal);
+        document.body.removeChild(overlay);
+        renderTransposed();
+      };
+      cancelBtn.onclick = () => { document.body.removeChild(modal); document.body.removeChild(overlay); };
+      
+      buttonsContainer.appendChild(okBtn);
+      buttonsContainer.appendChild(cancelBtn);
+      modal.appendChild(buttonsContainer);
+      
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.top = '0';
+      overlay.style.left = '0';
+      overlay.style.right = '0';
+      overlay.style.bottom = '0';
+      overlay.style.backgroundColor = 'rgba(0,0,0,0.3)';
+      overlay.style.zIndex = '9999';
+      overlay.onclick = () => { document.body.removeChild(modal); document.body.removeChild(overlay); };
+      
+      document.body.appendChild(overlay);
+      document.body.appendChild(modal);
+      dayInput.focus();
+    };
+    
+    container2.appendChild(display2);
+    container2.appendChild(pickerBtn2);
+    cell.appendChild(container2);
 
   } else if (isDuration){
     // Duration input: strict HH:MM format validation
