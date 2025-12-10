@@ -1007,31 +1007,38 @@ function computeCompositeYield(rec){
   return result;
 }
 
-// Compute Cost = Total Process Time * 4000
-// Total Process Time is in HH:MM format, convert to decimal HH.MM and multiply
-// Returns empty string if Total Process Time is empty
+// Compute Cost = Total Process Time (hours) * 4000 / Total Input
+// Total Process Time is in HH:MM format; convert minutes to fractional hours (mm/60)
+// Returns empty string if Total Process Time or Total Input is missing/invalid
 function computeCost(rec){
   if(!rec) return '';
   const totalProcessTimeKey = headerToKey['Total Process Time'];
   const costKey = headerToKey['Cost'];
-  if(!totalProcessTimeKey || !costKey) return '';
-  
+  const totalInputKey = headerToKey['Total Input'];
+  if(!totalProcessTimeKey || !costKey || !totalInputKey) return '';
+
   const timeStr = String(rec[totalProcessTimeKey] || '').trim();
   // If Total Process Time is empty, clear cost
   if(!timeStr) { rec[costKey] = ''; return ''; }
-  
-  // Parse HH:MM format
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+
+  // Parse HH:MM format (allow more than 2 digits for hours)
+  const match = timeStr.match(/^(\d+):(\d{2})$/);
   if(!match) { rec[costKey] = ''; return ''; }
-  
+
   const hh = Number(match[1]);
   const mm = Number(match[2]);
-  
-  // Convert HH:MM to decimal HH.MM
-  const decimal = hh + (mm / 100);
-  
-  // Calculate cost
-  const cost = (decimal * 4000).toFixed(2);
+  if(isNaN(hh) || isNaN(mm) || mm < 0 || mm >= 60){ rec[costKey] = ''; return ''; }
+
+  // Convert HH:MM to decimal hours
+  const hours = hh + (mm / 60);
+
+  // Read Total Input and validate
+  const totalInputStr = String(rec[totalInputKey] || '').trim();
+  const totalInput = parseFloat(totalInputStr);
+  if(!totalInputStr || isNaN(totalInput) || totalInput === 0){ rec[costKey] = ''; return ''; }
+
+  // Calculate cost: hours * (4000 / totalInput)
+  const cost = (hours * (4000 / totalInput)).toFixed(2);
   rec[costKey] = cost;
   return cost;
 }
@@ -1140,7 +1147,7 @@ function renderTransposed(){
     if(lower.includes('cost')){
       const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
       const tip = document.createElement('span'); tip.className = 'info-tooltip';
-      tip.textContent = 'Cost = Total Process Time (hours) * 4000';
+      tip.textContent = 'Cost = Total Process Time (hours) * 4000 / Total Input';
       icon.appendChild(tip); d.appendChild(icon);
     }
 
