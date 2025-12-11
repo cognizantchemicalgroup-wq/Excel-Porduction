@@ -1023,13 +1023,13 @@ function computeCompositeYield(rec){
 // Returns empty string if Total Process Time or Total Input is missing/invalid
 function computeCost(rec){
   if(!rec) return '';
-  const totalProcessTimeKey = headerToKey['Total Process Time'];
+  const totalHeatingHoursKey = headerToKey['Total heating hours'];
   const costKey = headerToKey['Cost'];
   const totalInputKey = headerToKey['Total Input'];
-  if(!totalProcessTimeKey || !costKey || !totalInputKey) return '';
+  if(!totalHeatingHoursKey || !costKey || !totalInputKey) return '';
 
-  const timeStr = String(rec[totalProcessTimeKey] || '').trim();
-  // If Total Process Time is empty, clear cost
+  const timeStr = String(rec[totalHeatingHoursKey] || '').trim();
+  // If Total heating hours is empty, clear cost
   if(!timeStr) { rec[costKey] = ''; return ''; }
 
   // Parse HH:MM format (allow more than 2 digits for hours)
@@ -1048,7 +1048,7 @@ function computeCost(rec){
   const totalInput = parseFloat(totalInputStr);
   if(!totalInputStr || isNaN(totalInput) || totalInput === 0){ rec[costKey] = ''; return ''; }
 
-  // Calculate cost: hours * (4000 / totalInput)
+  // Calculate cost: total heating hours * (4000 / totalInput)
   const cost = (hours * (4000 / totalInput)).toFixed(2);
   rec[costKey] = cost;
   return cost;
@@ -1158,7 +1158,7 @@ function renderTransposed(){
     if(lower.includes('cost')){
       const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
       const tip = document.createElement('span'); tip.className = 'info-tooltip';
-      tip.textContent = 'Cost = Total Process Time (hours) * 4000 / Total Input';
+      tip.textContent = 'Cost = Total heating hours (hours) * 4000 / Total Input';
       icon.appendChild(tip); d.appendChild(icon);
     }
 
@@ -1226,7 +1226,7 @@ function renderTransposed(){
     } else if(lower.includes('cost')){
       const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
       const tip = document.createElement('span'); tip.className = 'info-tooltip';
-      tip.textContent = 'Cost = Total Process Time (hours) * 4000';
+      tip.textContent = 'Cost = Total heating hours (hours) * 4000 / Total Input';
       icon.appendChild(tip); lab.appendChild(icon);
     }
     
