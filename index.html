@@ -985,15 +985,17 @@ function computeMainRecoveryPercent(rec){
   return result;
 }
 
-// Compute Composite Yield = F1 + F2 + Residue + Drain qty while sampling + Output + Water + Total Input
+// Compute Composite Yield % = (Output + Water + F-1 + F-2 + Drain qty while sampling + Residue) / Total Input * 100
 function computeCompositeYield(rec){
   if(!rec) return '';
-  const fields = ['F-1', 'F-2', 'Residue', 'Drain qty while sampling', 'Output', 'Water', 'Total Input'];
+  const numeratorFields = ['Output', 'Water', 'F-1', 'F-2', 'Drain qty while sampling', 'Residue'];
   const compositeKey = headerToKey['Composite yield %'];
-  if(!compositeKey) return '';
-  
+  const totalInputKey = headerToKey['Total Input'];
+  if(!compositeKey || !totalInputKey) return '';
+
+  // Sum numerator fields
   let sum = 0;
-  for(const fieldName of fields){
+  for(const fieldName of numeratorFields){
     const key = headerToKey[fieldName];
     if(!key) continue;
     const val = String(rec[key] || '').trim();
@@ -1001,8 +1003,17 @@ function computeCompositeYield(rec){
     const num = parseFloat(val);
     if(!isNaN(num)) sum += num;
   }
-  
-  const result = sum.toFixed(2);
+
+  // Read and validate total input
+  const totalInputStr = String(rec[totalInputKey] || '').trim();
+  const totalInput = parseFloat(totalInputStr);
+  if(!totalInputStr || isNaN(totalInput) || totalInput === 0){
+    rec[compositeKey] = '';
+    return '';
+  }
+
+  const percent = (sum / totalInput) * 100;
+  const result = percent.toFixed(2);
   rec[compositeKey] = result;
   return result;
 }
@@ -1139,7 +1150,7 @@ function renderTransposed(){
     if(lower.includes('composite yield')){
       const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
       const tip = document.createElement('span'); tip.className = 'info-tooltip';
-      tip.textContent = 'Composite yield % = (F-1 + F-2 + Residue + Drain qty while sampling + Output + Water) / Total Input';
+      tip.innerHTML = 'Composite yield % = (F-1 + F-2 + Residue + Drain qty while sampling + Output + Water) <br>/ Total Input* 100';
       icon.appendChild(tip); d.appendChild(icon);
     }
 
