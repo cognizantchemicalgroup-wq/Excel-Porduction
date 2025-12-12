@@ -964,7 +964,7 @@ function computeTotalProcessTimeForRecord(rec){
 // Returns empty string if no duration fields are filled
 // function computeTotalProcessTimeForRecordOld(rec){
 
-// Compute Main Recovery % = (Total Input / Output) * 100
+// Compute Main Recovery % = (Output / Total Input) * 100
 function computeMainRecoveryPercent(rec){
   if(!rec) return '';
   const totalInputKey = headerToKey['Total Input'];
@@ -978,9 +978,9 @@ function computeMainRecoveryPercent(rec){
   
   const tiNum = parseFloat(ti);
   const outNum = parseFloat(out);
-  if(isNaN(tiNum) || isNaN(outNum) || outNum === 0) { rec[mainRecoveryKey] = ''; return ''; }
+  if(isNaN(tiNum) || isNaN(outNum) || tiNum === 0) { rec[mainRecoveryKey] = ''; return ''; }
   
-  const result = (tiNum / outNum * 100).toFixed(2);
+  const result = (outNum / tiNum * 100).toFixed(2);
   rec[mainRecoveryKey] = result;
   return result;
 }
@@ -1142,7 +1142,7 @@ function renderTransposed(){
     if(lower.includes('main recovery')){
       const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
       const tip = document.createElement('span'); tip.className = 'info-tooltip';
-      tip.textContent = 'Main Recovery% = (Total Input / Output) * 100';
+      tip.textContent = 'Main Recovery% = (Output / Total Input) * 100';
       icon.appendChild(tip); d.appendChild(icon);
     }
 
@@ -1216,7 +1216,7 @@ function renderTransposed(){
     } else if(lower.includes('main recovery')){
       const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
       const tip = document.createElement('span'); tip.className = 'info-tooltip';
-      tip.textContent = 'Main Recovery% = (Total Input / Output) * 100';
+      tip.textContent = 'Main Recovery% = (Output / Total Input) * 100';
       icon.appendChild(tip); lab.appendChild(icon);
     } else if(lower.includes('composite yield')){
       const icon = document.createElement('span'); icon.className = 'info-icon'; icon.textContent = 'ℹ';
